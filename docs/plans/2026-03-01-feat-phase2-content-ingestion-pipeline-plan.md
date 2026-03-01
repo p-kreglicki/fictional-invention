@@ -412,12 +412,12 @@ export const DocumentUploadSchema = z.discriminatedUnion('type', [
 
 **Tasks:**
 
-- [ ] Create document list endpoint
+- [x] Create document list endpoint
   - File: `src/app/[locale]/api/documents/route.ts`
   - GET: List user's documents with status
   - Include chunk count, created date
 
-- [ ] Implement document deletion
+- [x] Implement document deletion
   - DELETE: Remove document, chunks, and Pinecone vectors
   - Use database cascade for chunks
   - Delete Pinecone vectors by prefix filter
@@ -433,10 +433,10 @@ await index.deleteMany({
 ```
 
 **Acceptance Criteria:**
-- [ ] Documents listed correctly
-- [ ] Deletion removes all related data
-- [ ] Pinecone vectors cleaned up
-- [ ] Quota freed after deletion
+- [x] Documents listed correctly
+- [x] Deletion removes all related data
+- [x] Pinecone vectors cleaned up
+- [x] Quota freed after deletion
 
 ---
 
