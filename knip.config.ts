@@ -18,8 +18,13 @@ const config: KnipConfig = {
   ignoreDependencies: [
     '@commitlint/types',
     '@clerk/types',
+    '@mozilla/readability', // Used in content ingestion pipeline
     '@swc/helpers', // Transitive dependency required by Next.js
     'conventional-changelog-conventionalcommits',
+    'file-type', // Used in content ingestion pipeline
+    'ipaddr.js', // Used in content ingestion pipeline
+    'linkedom', // Used in content ingestion pipeline
+    'unpdf', // Used in content ingestion pipeline
     'vite',
     'postcss-load-config',
   ],
