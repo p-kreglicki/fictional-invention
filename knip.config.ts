@@ -14,17 +14,16 @@ const config: KnipConfig = {
     'src/libs/Mistral.ts',
     'src/libs/PdfValidator.ts', // Types exported for content ingestion consumers
     'src/libs/PdfExtractor.ts', // Types exported for content ingestion consumers
+    'src/libs/UrlValidator.ts', // Types exported for content ingestion consumers
+    'src/libs/UrlExtractor.ts', // Types exported for content ingestion consumers
     'src/validations/DocumentValidation.ts', // Used in content ingestion pipeline Phase 2.6
   ],
   // Dependencies to ignore during analysis
   ignoreDependencies: [
     '@commitlint/types',
     '@clerk/types',
-    '@mozilla/readability', // Used in content ingestion pipeline
     '@swc/helpers', // Transitive dependency required by Next.js
     'conventional-changelog-conventionalcommits',
-    'ipaddr.js', // Used in content ingestion pipeline
-    'linkedom', // Used in content ingestion pipeline
     'vite',
     'postcss-load-config',
   ],

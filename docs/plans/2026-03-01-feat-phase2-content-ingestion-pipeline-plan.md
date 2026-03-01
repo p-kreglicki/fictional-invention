@@ -181,7 +181,7 @@ export async function validatePdfBuffer(buffer: Buffer): Promise<{
 
 **Tasks:**
 
-- [ ] Create URL validator with SSRF protection
+- [x] Create URL validator with SSRF protection
   - File: `src/libs/UrlValidator.ts`
   - DNS resolution before fetch
   - Block private IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x, ::1)
@@ -189,7 +189,7 @@ export async function validatePdfBuffer(buffer: Buffer): Promise<{
   - HTTPS only
   - No redirect following (security)
 
-- [ ] Create URL content extractor
+- [x] Create URL content extractor
   - File: `src/libs/UrlExtractor.ts`
   - Use `@mozilla/readability` with `linkedom`
   - 10-second timeout
@@ -242,11 +242,11 @@ export async function validateUrl(urlString: string): Promise<{
 ```
 
 **Acceptance Criteria:**
-- [ ] Valid HTTPS URLs pass validation
-- [ ] Private IPs blocked (localhost, 10.x, etc.)
-- [ ] Cloud metadata endpoints blocked
-- [ ] Content extracted from readable pages
-- [ ] Non-HTML content rejected
+- [x] Valid HTTPS URLs pass validation
+- [x] Private IPs blocked (localhost, 10.x, etc.)
+- [x] Cloud metadata endpoints blocked
+- [x] Content extracted from readable pages
+- [x] Non-HTML content rejected
 
 ---
 
