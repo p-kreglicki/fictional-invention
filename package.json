@@ -43,10 +43,15 @@
     "@hookform/resolvers": "^5.2.2",
     "@logtape/logtape": "^2.0.2",
     "@mistralai/mistralai": "^1.14.1",
+    "@mozilla/readability": "^0.6.0",
     "@pinecone-database/pinecone": "^7.1.0",
     "@sentry/nextjs": "^10.38.0",
     "@t3-oss/env-nextjs": "^0.13.10",
     "drizzle-orm": "^0.45.1",
+    "file-type": "^21.3.0",
+    "ipaddr.js": "^2.3.0",
+    "linkedom": "^0.18.12",
+    "mistral-tokenizer-ts": "^2.2.1",
     "next": "^16.1.6",
     "next-intl": "^4.8.2",
     "pg": "^8.18.0",
@@ -55,6 +60,7 @@
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.71.1",
     "svix": "^1.86.0",
+    "unpdf": "^1.4.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
