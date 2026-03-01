@@ -112,14 +112,14 @@ Build a secure content ingestion pipeline that accepts user uploads (PDF files, 
 
 **Tasks:**
 
-- [ ] Create PDF validator
+- [x] Create PDF validator
   - File: `src/libs/PdfValidator.ts`
   - Magic bytes validation (%PDF header)
   - File-type library deep validation
   - EOF marker check (polyglot attack prevention)
   - Size limit enforcement (10MB)
 
-- [ ] Create PDF extractor
+- [x] Create PDF extractor
   - File: `src/libs/PdfExtractor.ts`
   - Use `unpdf` for serverless-optimized extraction
   - Handle password-protected PDFs (reject with message)
@@ -168,10 +168,10 @@ export async function validatePdfBuffer(buffer: Buffer): Promise<{
 ```
 
 **Acceptance Criteria:**
-- [ ] Valid PDFs pass validation
-- [ ] Invalid files rejected with specific error
-- [ ] Password-protected PDFs detected and rejected
-- [ ] Image-only PDFs handled gracefully
+- [x] Valid PDFs pass validation
+- [x] Invalid files rejected with specific error
+- [x] Password-protected PDFs detected and rejected
+- [x] Image-only PDFs handled gracefully
 
 ---
 
