@@ -7,14 +7,12 @@ import { Buffer } from 'node:buffer';
 
 import { extractText, getDocumentProxy } from 'unpdf';
 
-// Minimum text content to consider a PDF as having extractable text
-const MIN_TEXT_LENGTH = 10;
-
-// Maximum number of pages allowed (security limit)
-const MAX_PAGE_COUNT = 100;
-
-// Timeout for PDF parsing operations (30 seconds)
-const PARSING_TIMEOUT_MS = 30_000;
+import {
+  PDF_MAX_PAGE_COUNT,
+  PDF_MIN_TEXT_LENGTH,
+  PDF_PARSING_TIMEOUT_MS,
+} from './PdfConfig';
+import { validatePdfBuffer } from './PdfValidator';
 
 /**
  * Custom error for timeout scenarios.
@@ -53,7 +51,7 @@ export type PdfExtractionResult = {
   text?: string;
   pageCount?: number;
   error?: string;
-  errorCode?: 'PASSWORD_PROTECTED' | 'NO_TEXT' | 'EXTRACTION_FAILED' | 'PAGE_LIMIT_EXCEEDED' | 'TIMEOUT';
+  errorCode?: 'PASSWORD_PROTECTED' | 'NO_TEXT' | 'EXTRACTION_FAILED' | 'PAGE_LIMIT_EXCEEDED' | 'TIMEOUT' | 'VALIDATION_FAILED';
 };
 
 /**
@@ -74,14 +72,14 @@ export async function extractPdfText(
       : new Uint8Array(buffer);
 
     // Get document proxy for cleanup (with timeout)
-    proxy = await withTimeout(getDocumentProxy(data), PARSING_TIMEOUT_MS);
+    proxy = await withTimeout(getDocumentProxy(data), PDF_PARSING_TIMEOUT_MS);
 
     // Check page count limit before extraction (security)
-    if (proxy.numPages > MAX_PAGE_COUNT) {
+    if (proxy.numPages > PDF_MAX_PAGE_COUNT) {
       return {
         success: false,
         pageCount: proxy.numPages,
-        error: `PDF exceeds ${MAX_PAGE_COUNT} page limit.`,
+        error: `PDF exceeds ${PDF_MAX_PAGE_COUNT} page limit.`,
         errorCode: 'PAGE_LIMIT_EXCEEDED',
       };
     }
@@ -89,13 +87,13 @@ export async function extractPdfText(
     // Extract text from all pages (with timeout)
     const result = await withTimeout(
       extractText(proxy, { mergePages: true }),
-      PARSING_TIMEOUT_MS,
+      PDF_PARSING_TIMEOUT_MS,
     );
 
     // Check for image-only PDF (no extractable text)
     const text = typeof result.text === 'string' ? result.text.trim() : '';
 
-    if (text.length < MIN_TEXT_LENGTH) {
+    if (text.length < PDF_MIN_TEXT_LENGTH) {
       return {
         success: false,
         pageCount: result.totalPages,
@@ -164,4 +162,28 @@ export async function hasExtractableText(
 ): Promise<boolean> {
   const result = await extractPdfText(buffer);
   return result.success;
+}
+
+/**
+ * Validates and extracts text from a PDF buffer.
+ * Orchestrates validation and extraction in the correct order.
+ * Use this function instead of calling validatePdfBuffer and extractPdfText separately.
+ * @param buffer - Raw PDF file buffer
+ * @returns Extraction result with text or error details
+ */
+export async function processPdf(
+  buffer: Buffer | Uint8Array,
+): Promise<PdfExtractionResult> {
+  // Step 1: Validate PDF structure and security
+  const validation = await validatePdfBuffer(buffer);
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: validation.error,
+      errorCode: 'VALIDATION_FAILED',
+    };
+  }
+
+  // Step 2: Extract text from validated PDF
+  return extractPdfText(buffer);
 }

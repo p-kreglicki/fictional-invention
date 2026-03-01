@@ -7,17 +7,13 @@ import { Buffer } from 'node:buffer';
 
 import { fileTypeFromBuffer } from 'file-type';
 
+import { PDF_EOF_SEARCH_BYTES, PDF_MAX_SIZE_BYTES } from './PdfConfig';
+
 // PDF magic bytes: %PDF
 const PDF_MAGIC_BYTES = [0x25, 0x50, 0x44, 0x46] as const;
 
-// Maximum PDF file size (10MB)
-const MAX_PDF_SIZE = 10 * 1024 * 1024;
-
 // Minimum bytes needed for header check
 const MIN_HEADER_BYTES = 4;
-
-// Bytes to check for EOF marker (search last 1KB for %%EOF)
-const EOF_SEARCH_BYTES = 1024;
 
 export type PdfValidationResult = {
   valid: boolean;
@@ -37,8 +33,8 @@ export async function validatePdfBuffer(
   const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
 
   // Size limit check
-  if (buf.length > MAX_PDF_SIZE) {
-    return { valid: false, error: 'PDF exceeds 10MB limit' };
+  if (buf.length > PDF_MAX_SIZE_BYTES) {
+    return { valid: false, error: 'PDF exceeds size limit' };
   }
 
   // Minimum size for header
@@ -62,7 +58,7 @@ export async function validatePdfBuffer(
 
   // EOF marker check (polyglot attack prevention)
   // Search last 1KB for %%EOF marker and ensure it's the last non-whitespace content
-  const tailStart = Math.max(0, buf.length - EOF_SEARCH_BYTES);
+  const tailStart = Math.max(0, buf.length - PDF_EOF_SEARCH_BYTES);
   const tail = buf.subarray(tailStart).toString('ascii');
   const eofIndex = tail.lastIndexOf('%%EOF');
 
@@ -87,13 +83,13 @@ export async function validatePdfBuffer(
  * @returns True if size exceeds limit
  */
 export function exceedsPdfSizeLimit(sizeInBytes: number): boolean {
-  return sizeInBytes > MAX_PDF_SIZE;
+  return sizeInBytes > PDF_MAX_SIZE_BYTES;
 }
 
 /**
  * Gets the maximum allowed PDF size in bytes.
- * @returns Maximum PDF size (10MB)
+ * @returns Maximum PDF size
  */
 export function getMaxPdfSize(): number {
-  return MAX_PDF_SIZE;
+  return PDF_MAX_SIZE_BYTES;
 }

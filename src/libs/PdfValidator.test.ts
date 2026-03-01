@@ -67,7 +67,7 @@ describe('validatePdfBuffer', () => {
     const result = await validatePdfBuffer(buffer);
 
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('PDF exceeds 10MB limit');
+    expect(result.error).toBe('PDF exceeds size limit');
   });
 
   it('rejects file too small to be valid PDF', async () => {
