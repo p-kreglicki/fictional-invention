@@ -52,41 +52,20 @@ class ContentTooLargeError extends Error {
 }
 
 /**
- * Builds a URL that connects to a specific IP while preserving the original hostname.
- * This prevents DNS rebinding attacks by ensuring we connect to the validated IP.
- * @param originalUrl - Original URL with hostname
- * @param resolvedIp - IP address to connect to
- * @returns URL with IP address as host
- */
-function buildIpBasedUrl(originalUrl: URL, resolvedIp: string): string {
-  const newUrl = new URL(originalUrl.href);
-  // For IPv6, wrap in brackets
-  newUrl.hostname = resolvedIp.includes(':') ? `[${resolvedIp}]` : resolvedIp;
-  return newUrl.href;
-}
-
-/**
  * Fetches URL content with timeout and size limits.
  * Does not follow redirects for security.
- * Connects directly to resolved IP to prevent DNS rebinding attacks.
- * @param originalUrl - Original URL (for Host header)
- * @param resolvedIp - Pre-validated IP address to connect to
+ * @param url - URL to fetch (must be pre-validated for SSRF)
  * @returns Response body as string
  */
-async function fetchWithLimits(originalUrl: string, resolvedIp: string): Promise<string> {
+async function fetchWithLimits(url: string): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
 
-  const parsedUrl = new URL(originalUrl);
-  // Connect to the validated IP, not the hostname (prevents DNS rebinding)
-  const fetchUrl = buildIpBasedUrl(parsedUrl, resolvedIp);
-
   try {
-    const response = await fetch(fetchUrl, {
+    const response = await fetch(url, {
       signal: controller.signal,
       redirect: 'error', // Security: don't follow redirects
       headers: {
-        'Host': parsedUrl.host, // Original hostname for server routing
         'User-Agent': URL_USER_AGENT,
         'Accept': 'text/html,application/xhtml+xml',
       },
@@ -218,20 +197,10 @@ export async function extractUrlContent(urlString: string): Promise<UrlExtractio
     };
   }
 
-  // Use first resolved IP for fetch (prevents DNS rebinding)
-  const resolvedIp = validation.resolvedIps?.[0];
-  if (!resolvedIp) {
-    return {
-      success: false,
-      error: 'No resolved IP address available',
-      errorCode: 'VALIDATION_FAILED',
-    };
-  }
-
-  // Step 2: Fetch content with limits using validated IP
+  // Step 2: Fetch content with limits (URL already validated for SSRF)
   let html: string;
   try {
-    html = await fetchWithLimits(urlString, resolvedIp);
+    html = await fetchWithLimits(urlString);
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
