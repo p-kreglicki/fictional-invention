@@ -231,6 +231,72 @@ describe('validateUrl', () => {
     expect(result.valid).toBe(false);
     expect(result.error).toBe('URL points to blocked IP address');
   });
+
+  it('rejects broadcast IP (255.255.255.255)', async () => {
+    mockResolve4.mockResolvedValue(['255.255.255.255']);
+    mockResolve6.mockResolvedValue([]);
+
+    const result = await validateUrl('https://broadcast.test');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL resolves to blocked IP address');
+  });
+
+  it('rejects AS112 infrastructure IP', async () => {
+    mockResolve4.mockResolvedValue(['192.175.48.1']);
+    mockResolve6.mockResolvedValue([]);
+
+    const result = await validateUrl('https://as112.test');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL resolves to blocked IP address');
+  });
+
+  it('rejects AMT infrastructure IP', async () => {
+    mockResolve4.mockResolvedValue(['192.52.193.1']);
+    mockResolve6.mockResolvedValue([]);
+
+    const result = await validateUrl('https://amt.test');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL resolves to blocked IP address');
+  });
+
+  it('rejects IPv4-mapped IPv6 loopback (::ffff:127.0.0.1)', async () => {
+    mockResolve4.mockResolvedValue([]);
+    mockResolve6.mockResolvedValue(['::ffff:127.0.0.1']);
+
+    const result = await validateUrl('https://mapped.test');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL resolves to blocked IP address');
+  });
+
+  it('rejects IPv4-mapped IPv6 private (::ffff:10.0.0.1)', async () => {
+    mockResolve4.mockResolvedValue([]);
+    mockResolve6.mockResolvedValue(['::ffff:10.0.0.1']);
+
+    const result = await validateUrl('https://mapped-private.test');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL resolves to blocked IP address');
+  });
+
+  it('rejects direct IPv4-mapped IPv6 in URL', async () => {
+    const result = await validateUrl('https://[::ffff:127.0.0.1]/api');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL points to blocked IP address');
+  });
+
+  it('accepts IPv4-mapped IPv6 with public IP', async () => {
+    mockResolve4.mockResolvedValue([]);
+    mockResolve6.mockResolvedValue(['::ffff:93.184.216.34']);
+
+    const result = await validateUrl('https://mapped-public.test');
+
+    expect(result.valid).toBe(true);
+  });
 });
 
 describe('isHttpsUrl', () => {

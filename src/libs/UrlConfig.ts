@@ -18,6 +18,7 @@ export const URL_MIN_TEXT_LENGTH = 50;
  */
 export const BLOCKED_IP_RANGES = [
   'unspecified', // 0.0.0.0/8, ::
+  'broadcast', // 255.255.255.255
   'loopback', // 127.0.0.0/8, ::1
   'private', // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
   'carrierGradeNat', // 100.64.0.0/10 (shared address space)
@@ -25,6 +26,8 @@ export const BLOCKED_IP_RANGES = [
   'uniqueLocal', // fc00::/7
   'multicast', // 224.0.0.0/4, ff00::/8
   'reserved', // Various reserved ranges
+  'as112', // 192.175.48.0/24, 192.31.196.0/24 (RFC7534/7535)
+  'amt', // 192.52.193.0/24 (RFC7450)
 ] as const;
 
 /** Cloud metadata endpoint IP (AWS, GCP, Azure) */

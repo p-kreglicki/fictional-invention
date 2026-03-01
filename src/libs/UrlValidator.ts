@@ -30,6 +30,20 @@ function isBlockedIp(ip: string): boolean {
 
   try {
     const addr = ipaddr.parse(ip);
+
+    // Handle IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
+    // These must be checked against IPv4 blocked ranges
+    if (addr.kind() === 'ipv6') {
+      const ipv6Addr = addr as ipaddr.IPv6;
+      if (ipv6Addr.isIPv4MappedAddress()) {
+        const ipv4Addr = ipv6Addr.toIPv4Address();
+        const ipv4Range = ipv4Addr.range();
+        if (BLOCKED_IP_RANGES.includes(ipv4Range as (typeof BLOCKED_IP_RANGES)[number])) {
+          return true;
+        }
+      }
+    }
+
     const range = addr.range();
     return BLOCKED_IP_RANGES.includes(range as (typeof BLOCKED_IP_RANGES)[number]);
   } catch {
