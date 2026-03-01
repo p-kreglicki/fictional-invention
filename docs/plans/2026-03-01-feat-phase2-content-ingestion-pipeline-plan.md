@@ -81,28 +81,28 @@ Build a secure content ingestion pipeline that accepts user uploads (PDF files, 
 
 **Tasks:**
 
-- [ ] Install dependencies
+- [x] Install dependencies
   ```bash
   npm install unpdf file-type ipaddr.js @mozilla/readability linkedom mistral-tokenizer-ts
   ```
 
-- [ ] Create validation schemas
+- [x] Create validation schemas
   - File: `src/validations/DocumentValidation.ts`
 
-- [ ] Create text sanitizer utility
+- [x] Create text sanitizer utility
   - File: `src/libs/Sanitizer.ts`
   - Unicode NFC normalization
   - Control character removal
   - Whitespace normalization
 
-- [ ] Create token counter utility
+- [x] Create token counter utility
   - File: `src/libs/TokenCounter.ts`
   - Use `mistral-tokenizer-ts` for accurate counts
 
 **Acceptance Criteria:**
-- [ ] All dependencies installed
-- [ ] Validation schemas pass type checking
-- [ ] Sanitizer handles edge cases (null bytes, zero-width chars)
+- [x] All dependencies installed
+- [x] Validation schemas pass type checking
+- [x] Sanitizer handles edge cases (null bytes, zero-width chars)
 
 ---
 
