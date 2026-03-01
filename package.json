@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@arcjet/next": "^1.1.0",
+    "@swc/helpers": "^0.5.19",
     "@clerk/localizations": "^3.37.2",
     "@clerk/nextjs": "^6.39.0",
     "@electric-sql/pglite": "^0.3.15",
