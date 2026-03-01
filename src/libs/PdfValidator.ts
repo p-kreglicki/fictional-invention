@@ -71,9 +71,9 @@ export async function validatePdfBuffer(
   }
 
   // Check that only whitespace follows %%EOF (polyglot prevention)
+  // Uses regex test to short-circuit on first non-whitespace, avoiding string allocation
   const afterEof = tail.slice(eofIndex + 5); // 5 = length of '%%EOF'
-  const nonWhitespace = afterEof.replace(/\s/g, '');
-  if (nonWhitespace.length > 0) {
+  if (/\S/.test(afterEof)) {
     return { valid: false, error: 'Invalid data after PDF end marker' };
   }
 
