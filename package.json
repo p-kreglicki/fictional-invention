@@ -32,7 +32,8 @@
     "build-storybook": "storybook build",
     "verify:setup": "npx tsx scripts/verify-setup.ts",
     "pinecone:init": "npx tsx scripts/init-pinecone.ts",
-    "sync:users": "npx tsx scripts/sync-clerk-users.ts"
+    "sync:users": "npx tsx scripts/sync-clerk-users.ts",
+    "dev:tunnel": "./scripts/dev-with-ngrok.sh"
   },
   "dependencies": {
     "@arcjet/next": "^1.0.0",
