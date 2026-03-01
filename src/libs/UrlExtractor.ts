@@ -3,8 +3,12 @@
  * Fetches web pages and extracts readable text content.
  */
 
+import type { LookupFunction } from 'node:net';
+import { isIP } from 'node:net';
+
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
+import { Agent } from 'undici';
 
 import {
   URL_FETCH_TIMEOUT_MS,
@@ -52,19 +56,62 @@ class ContentTooLargeError extends Error {
 }
 
 /**
+ * Creates a DNS lookup function that only returns pre-validated IPs.
+ * Prevents DNS rebinding by bypassing real DNS resolution at connect time.
+ * @param hostname - Expected hostname for the request
+ * @param allowedIps - Pre-validated IP addresses from SSRF check
+ * @returns Lookup function that returns only allowed IPs
+ */
+function createPinnedLookup(hostname: string, allowedIps: string[]): LookupFunction {
+  return (lookupHost, options, callback) => {
+    if (lookupHost !== hostname) {
+      callback(new Error('Unexpected hostname in lookup'), '', 4);
+      return;
+    }
+
+    const requestedFamily = typeof options === 'number' ? options : options.family ?? 0;
+    const candidates = allowedIps.filter((ip) => {
+      const family = isIP(ip);
+      return requestedFamily === 0 || family === requestedFamily;
+    });
+
+    const selected = candidates[0];
+    if (!selected) {
+      callback(new Error('No allowed IP for requested address family'), '', 4);
+      return;
+    }
+
+    const family = isIP(selected);
+    if (family !== 4 && family !== 6) {
+      callback(new Error('Invalid IP address'), '', 4);
+      return;
+    }
+
+    callback(null, selected, family);
+  };
+}
+
+/**
  * Fetches URL content with timeout and size limits.
- * Does not follow redirects for security.
- * @param url - URL to fetch (must be pre-validated for SSRF)
+ * Uses DNS pinning to prevent rebinding attacks while preserving TLS/SNI.
+ * @param url - URL to fetch
+ * @param allowedIps - Pre-validated IP addresses to pin DNS to
  * @returns Response body as string
  */
-async function fetchWithLimits(url: string): Promise<string> {
+async function fetchWithLimits(url: string, allowedIps: string[]): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
 
+  const parsedUrl = new URL(url);
+  const dispatcher = new Agent({
+    connect: { lookup: createPinnedLookup(parsedUrl.hostname, allowedIps) },
+  });
   try {
     const response = await fetch(url, {
       signal: controller.signal,
       redirect: 'error', // Security: don't follow redirects
+      // @ts-expect-error dispatcher is valid for undici-backed fetch
+      dispatcher,
       headers: {
         'User-Agent': URL_USER_AGENT,
         'Accept': 'text/html,application/xhtml+xml',
@@ -122,6 +169,7 @@ async function fetchWithLimits(url: string): Promise<string> {
     return new TextDecoder().decode(combined);
   } finally {
     clearTimeout(timeoutId);
+    await dispatcher.close();
   }
 }
 
@@ -197,10 +245,20 @@ export async function extractUrlContent(urlString: string): Promise<UrlExtractio
     };
   }
 
-  // Step 2: Fetch content with limits (URL already validated for SSRF)
+  // Use validated IPs for DNS pinning (prevents DNS rebinding)
+  const allowedIps = validation.resolvedIps ?? [];
+  if (allowedIps.length === 0) {
+    return {
+      success: false,
+      error: 'No resolved IP address available',
+      errorCode: 'VALIDATION_FAILED',
+    };
+  }
+
+  // Step 2: Fetch content with DNS pinned to validated IPs
   let html: string;
   try {
-    html = await fetchWithLimits(urlString);
+    html = await fetchWithLimits(urlString, allowedIps);
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
@@ -253,10 +311,10 @@ export async function extractUrlContent(urlString: string): Promise<UrlExtractio
 }
 
 /**
- * Checks if a URL points to readable HTML content.
- * Performs full extraction to verify readability.
+ * Checks if a URL likely points to readable HTML content.
+ * Quick check without full extraction.
  * @param urlString - URL to check
- * @returns True if content was successfully extracted
+ * @returns True if URL likely has readable content
  */
 export async function hasReadableContent(urlString: string): Promise<boolean> {
   const result = await extractUrlContent(urlString);
