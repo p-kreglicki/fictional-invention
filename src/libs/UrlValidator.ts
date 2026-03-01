@@ -59,12 +59,18 @@ export async function validateUrl(urlString: string): Promise<UrlValidationResul
   }
 
   // Handle explicit IP addresses in hostname (bypasses DNS check)
-  if (ipaddr.isValid(url.hostname)) {
-    if (isBlockedIp(url.hostname)) {
+  // IPv6 literals in URLs have brackets: https://[::1]/ -> hostname is "[::1]"
+  // Strip brackets before validation
+  const hostnameForIpCheck = url.hostname.startsWith('[') && url.hostname.endsWith(']')
+    ? url.hostname.slice(1, -1)
+    : url.hostname;
+
+  if (ipaddr.isValid(hostnameForIpCheck)) {
+    if (isBlockedIp(hostnameForIpCheck)) {
       return { valid: false, error: 'URL points to blocked IP address' };
     }
     // Valid public IP - no DNS resolution needed
-    return { valid: true, resolvedIps: [url.hostname] };
+    return { valid: true, resolvedIps: [hostnameForIpCheck] };
   }
 
   // DNS resolution to check actual IP addresses

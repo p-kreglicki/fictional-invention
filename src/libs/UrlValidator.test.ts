@@ -181,6 +181,56 @@ describe('validateUrl', () => {
     expect(result.valid).toBe(false);
     expect(result.error).toBe('URL resolves to blocked IP address');
   });
+
+  it('rejects IPv6 literal URL with loopback address', async () => {
+    // URL with IPv6 literal: https://[::1]/
+    const result = await validateUrl('https://[::1]/api');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL points to blocked IP address');
+  });
+
+  it('accepts IPv6 literal URL with public address', async () => {
+    // Public IPv6 address
+    const result = await validateUrl('https://[2606:2800:220:1:248:1893:25c8:1946]/');
+
+    expect(result.valid).toBe(true);
+    expect(result.resolvedIps).toContain('2606:2800:220:1:248:1893:25c8:1946');
+  });
+
+  it('rejects unspecified IP (0.0.0.0)', async () => {
+    mockResolve4.mockResolvedValue(['0.0.0.0']);
+    mockResolve6.mockResolvedValue([]);
+
+    const result = await validateUrl('https://zero.test');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL resolves to blocked IP address');
+  });
+
+  it('rejects carrier-grade NAT IP (100.64.x.x)', async () => {
+    mockResolve4.mockResolvedValue(['100.64.0.1']);
+    mockResolve6.mockResolvedValue([]);
+
+    const result = await validateUrl('https://cgnat.test');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL resolves to blocked IP address');
+  });
+
+  it('rejects direct unspecified IP in URL', async () => {
+    const result = await validateUrl('https://0.0.0.0/api');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL points to blocked IP address');
+  });
+
+  it('rejects direct carrier-grade NAT IP in URL', async () => {
+    const result = await validateUrl('https://100.64.0.1/api');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL points to blocked IP address');
+  });
 });
 
 describe('isHttpsUrl', () => {
