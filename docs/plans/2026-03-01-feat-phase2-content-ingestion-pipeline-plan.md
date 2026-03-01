@@ -256,7 +256,7 @@ export async function validateUrl(urlString: string): Promise<{
 
 **Tasks:**
 
-- [ ] Create text chunker
+- [x] Create text chunker
   - File: `src/libs/TextChunker.ts`
   - Recursive character splitting
   - Target: ~500 tokens (~2000 chars)
@@ -264,7 +264,7 @@ export async function validateUrl(urlString: string): Promise<{
   - Sentence-aware boundaries
   - Handle Italian abbreviations (dott., sig., ecc.)
 
-- [ ] Create chunk position tracking
+- [x] Create chunk position tracking
   - Track start/end character positions
   - Track chunk sequence number
 
@@ -309,10 +309,10 @@ export function chunkText(text: string, options?: {
 ```
 
 **Acceptance Criteria:**
-- [ ] Chunks respect token limits
-- [ ] Overlap preserves context
-- [ ] Italian sentence boundaries respected
-- [ ] Chunk positions tracked accurately
+- [x] Chunks respect token limits
+- [x] Overlap preserves context
+- [x] Italian sentence boundaries respected
+- [x] Chunk positions tracked accurately
 
 ---
 
