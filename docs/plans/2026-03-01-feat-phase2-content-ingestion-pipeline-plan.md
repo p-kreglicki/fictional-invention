@@ -358,7 +358,7 @@ uploading ──▶ processing ──▶ ready
 
 **Tasks:**
 
-- [ ] Create upload route handler
+- [x] Create upload route handler
   - File: `src/app/[locale]/api/documents/upload/route.ts`
   - Accept FormData (PDF) or JSON (URL/text)
   - Validate user authentication
@@ -366,7 +366,7 @@ uploading ──▶ processing ──▶ ready
   - Dispatch to appropriate extractor
   - Return document ID and initial status
 
-- [ ] Create document status endpoint
+- [x] Create document status endpoint
   - File: `src/app/[locale]/api/documents/[id]/route.ts`
   - GET: Return document with status
   - DELETE: Remove document and cleanup vectors
@@ -398,11 +398,11 @@ export const DocumentUploadSchema = z.discriminatedUnion('type', [
 ```
 
 **Acceptance Criteria:**
-- [ ] PDF upload via FormData works
-- [ ] URL import via JSON works
-- [ ] Text paste via JSON works
-- [ ] Quota enforcement works
-- [ ] Status endpoint returns current state
+- [x] PDF upload via FormData works
+- [x] URL import via JSON works
+- [x] Text paste via JSON works
+- [x] Quota enforcement works
+- [x] Status endpoint returns current state
 
 ---
 
