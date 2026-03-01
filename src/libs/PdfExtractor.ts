@@ -10,12 +10,50 @@ import { extractText, getDocumentProxy } from 'unpdf';
 // Minimum text content to consider a PDF as having extractable text
 const MIN_TEXT_LENGTH = 10;
 
+// Maximum number of pages allowed (security limit)
+const MAX_PAGE_COUNT = 100;
+
+// Timeout for PDF parsing operations (30 seconds)
+const PARSING_TIMEOUT_MS = 30_000;
+
+/**
+ * Custom error for timeout scenarios.
+ */
+class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TimeoutError';
+  }
+}
+
+/**
+ * Wraps a promise with a timeout.
+ * @param promise - Promise to wrap
+ * @param timeoutMs - Timeout in milliseconds
+ * @returns Promise that rejects with TimeoutError if timeout exceeded
+ */
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new TimeoutError(`Operation timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId!);
+  }
+}
+
 export type PdfExtractionResult = {
   success: boolean;
   text?: string;
   pageCount?: number;
   error?: string;
-  errorCode?: 'PASSWORD_PROTECTED' | 'NO_TEXT' | 'EXTRACTION_FAILED';
+  errorCode?: 'PASSWORD_PROTECTED' | 'NO_TEXT' | 'EXTRACTION_FAILED' | 'PAGE_LIMIT_EXCEEDED' | 'TIMEOUT';
 };
 
 /**
@@ -35,11 +73,24 @@ export async function extractPdfText(
       ? buffer
       : new Uint8Array(buffer);
 
-    // Get document proxy for cleanup
-    proxy = await getDocumentProxy(data);
+    // Get document proxy for cleanup (with timeout)
+    proxy = await withTimeout(getDocumentProxy(data), PARSING_TIMEOUT_MS);
 
-    // Extract text from all pages
-    const result = await extractText(proxy, { mergePages: true });
+    // Check page count limit before extraction (security)
+    if (proxy.numPages > MAX_PAGE_COUNT) {
+      return {
+        success: false,
+        pageCount: proxy.numPages,
+        error: `PDF exceeds ${MAX_PAGE_COUNT} page limit.`,
+        errorCode: 'PAGE_LIMIT_EXCEEDED',
+      };
+    }
+
+    // Extract text from all pages (with timeout)
+    const result = await withTimeout(
+      extractText(proxy, { mergePages: true }),
+      PARSING_TIMEOUT_MS,
+    );
 
     // Check for image-only PDF (no extractable text)
     const text = typeof result.text === 'string' ? result.text.trim() : '';
@@ -59,6 +110,15 @@ export async function extractPdfText(
       pageCount: result.totalPages,
     };
   } catch (error) {
+    // Handle timeout
+    if (error instanceof TimeoutError) {
+      return {
+        success: false,
+        error: 'PDF parsing timed out.',
+        errorCode: 'TIMEOUT',
+      };
+    }
+
     // Handle specific PDF.js errors
     const errorMessage = error instanceof Error ? error.message : String(error);
 

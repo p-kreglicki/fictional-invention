@@ -89,6 +89,46 @@ describe('validatePdfBuffer', () => {
     expect(result.error).toMatch(/File type detection failed|Invalid PDF structure/);
   });
 
+  it('rejects PDF with data after EOF marker (polyglot prevention)', async () => {
+    // Valid PDF structure but with malicious data appended after %%EOF
+    const polyglotPdf = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>
+endobj
+xref
+0 4
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+trailer
+<< /Size 4 /Root 1 0 R >>
+startxref
+196
+%%EOF
+<script>alert('xss')</script>`;
+    const buffer = Buffer.from(polyglotPdf);
+    const result = await validatePdfBuffer(buffer);
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('Invalid data after PDF end marker');
+  });
+
+  it('accepts PDF with only whitespace after EOF marker', async () => {
+    const buffer = createValidPdfBuffer();
+    // Add some trailing whitespace
+    const withWhitespace = Buffer.concat([buffer, Buffer.from('\n  \r\n')]);
+    const result = await validatePdfBuffer(withWhitespace);
+
+    expect(result.valid).toBe(true);
+  });
+
   it('accepts Uint8Array input', async () => {
     const buffer = createValidPdfBuffer();
     const uint8Array = new Uint8Array(buffer);

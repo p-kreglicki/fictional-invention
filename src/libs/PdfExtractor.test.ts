@@ -115,6 +115,11 @@ describe('extractPdfText', () => {
   });
 });
 
+// Note: PAGE_LIMIT_EXCEEDED and TIMEOUT error codes require either:
+// - A real 100+ page PDF for page limit testing
+// - Long-running/malformed PDF for timeout testing
+// These are validated through manual integration testing with crafted files.
+
 describe('hasExtractableText', () => {
   it('returns true for PDF with text', async () => {
     const buffer = createPdfWithText();

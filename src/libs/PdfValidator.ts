@@ -61,11 +61,20 @@ export async function validatePdfBuffer(
   }
 
   // EOF marker check (polyglot attack prevention)
-  // Search last 1KB for %%EOF marker
+  // Search last 1KB for %%EOF marker and ensure it's the last non-whitespace content
   const tailStart = Math.max(0, buf.length - EOF_SEARCH_BYTES);
   const tail = buf.subarray(tailStart).toString('ascii');
-  if (!tail.includes('%%EOF')) {
+  const eofIndex = tail.lastIndexOf('%%EOF');
+
+  if (eofIndex === -1) {
     return { valid: false, error: 'Invalid PDF structure' };
+  }
+
+  // Check that only whitespace follows %%EOF (polyglot prevention)
+  const afterEof = tail.slice(eofIndex + 5); // 5 = length of '%%EOF'
+  const nonWhitespace = afterEof.replace(/\s/g, '');
+  if (nonWhitespace.length > 0) {
+    return { valid: false, error: 'Invalid data after PDF end marker' };
   }
 
   return { valid: true };
