@@ -16,6 +16,7 @@ describe('ContentIngestion types', () => {
 
   it('defines IngestionInput interface correctly', () => {
     const input: IngestionInput = {
+      documentId: 'doc-123',
       userId: 'user-123',
       title: 'Test Document',
       contentType: 'text',
@@ -30,6 +31,7 @@ describe('ContentIngestion types', () => {
 
   it('allows optional fields in IngestionInput', () => {
     const inputWithOptionals: IngestionInput = {
+      documentId: 'doc-123',
       userId: 'user-123',
       title: 'Test Document',
       contentType: 'url',

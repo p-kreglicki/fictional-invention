@@ -8,8 +8,8 @@ import type { ChunkMetadata } from './Pinecone';
 import type { Chunk } from './TextChunker';
 import type { NewChunk, NewDocument } from '@/models/Schema';
 
-import { eq } from 'drizzle-orm';
-import { chunksSchema, documentsSchema } from '@/models/Schema';
+import { count, eq, sql } from 'drizzle-orm';
+import { chunksSchema, documentsSchema, usersSchema } from '@/models/Schema';
 import { db } from './DB';
 import { logger } from './Logger';
 import { createEmbeddingsBatched } from './Mistral';
@@ -20,10 +20,12 @@ import { countTokensEstimate } from './TokenCounter';
 // Processing constraints
 const MAX_CHUNKS_PER_DOCUMENT = 50;
 const PINECONE_BATCH_SIZE = 100;
+const MAX_DOCUMENTS_PER_USER = 50;
 
 export type ContentType = 'pdf' | 'url' | 'text';
 
 export type IngestionInput = {
+  documentId: string;
   userId: string;
   title: string;
   contentType: ContentType;
@@ -38,6 +40,21 @@ type IngestionResult = {
   chunkCount?: number;
   error?: string;
   errorCode?: 'CHUNK_LIMIT_EXCEEDED' | 'EMBEDDING_FAILED' | 'STORAGE_FAILED' | 'EMPTY_CONTENT';
+};
+
+type ReserveDocumentInput = {
+  userId: string;
+  title: string;
+  contentType: ContentType;
+  sourceUrl?: string;
+  originalFilename?: string;
+};
+
+type ReserveDocumentResult = {
+  success: boolean;
+  documentId?: string;
+  error?: string;
+  errorCode?: 'QUOTA_EXCEEDED' | 'USER_NOT_FOUND' | 'STORAGE_FAILED';
 };
 
 /**
@@ -74,6 +91,90 @@ async function updateDocumentStatus(
   await db.update(documentsSchema)
     .set(updates)
     .where(eq(documentsSchema.id, documentId));
+}
+
+/**
+ * Reserves a document slot atomically under a user-level row lock.
+ * Prevents quota races under concurrent uploads.
+ * @param input - Reservation parameters
+ * @returns Reservation result with reserved document ID or quota error
+ */
+export async function reserveDocumentSlot(input: ReserveDocumentInput): Promise<ReserveDocumentResult> {
+  try {
+    return await db.transaction(async (tx) => {
+      logger.info('quota_check_started', { userId: input.userId });
+
+      const lockResult = await tx.execute(
+        sql`SELECT ${usersSchema.id} FROM ${usersSchema} WHERE ${usersSchema.id} = ${input.userId} FOR UPDATE`,
+      );
+
+      if (lockResult.rows.length === 0) {
+        return {
+          success: false,
+          error: 'User not found',
+          errorCode: 'USER_NOT_FOUND',
+        };
+      }
+
+      const [quotaResult] = await tx
+        .select({ count: count() })
+        .from(documentsSchema)
+        .where(eq(documentsSchema.userId, input.userId));
+
+      const currentCount = quotaResult?.count ?? 0;
+      if (currentCount >= MAX_DOCUMENTS_PER_USER) {
+        logger.info('quota_rejected', { userId: input.userId, currentCount, max: MAX_DOCUMENTS_PER_USER });
+        return {
+          success: false,
+          error: `You've reached the ${MAX_DOCUMENTS_PER_USER} document limit. Delete some documents to upload more.`,
+          errorCode: 'QUOTA_EXCEEDED',
+        };
+      }
+
+      const documentData: NewDocument = {
+        userId: input.userId,
+        title: input.title,
+        contentType: input.contentType,
+        sourceUrl: input.sourceUrl,
+        originalFilename: input.originalFilename,
+        status: 'uploading',
+        chunkCount: 0,
+      };
+
+      const [document] = await tx
+        .insert(documentsSchema)
+        .values(documentData)
+        .returning({ id: documentsSchema.id });
+
+      logger.info('quota_reserved', {
+        userId: input.userId,
+        documentId: document?.id,
+        currentCount,
+        max: MAX_DOCUMENTS_PER_USER,
+      });
+
+      return {
+        success: true,
+        documentId: document?.id,
+      };
+    });
+  } catch (error) {
+    logger.error('Document slot reservation failed', { userId: input.userId, error });
+    return {
+      success: false,
+      error: 'Failed to reserve document slot.',
+      errorCode: 'STORAGE_FAILED',
+    };
+  }
+}
+
+/**
+ * Marks a reserved document as failed with a user-facing message.
+ * @param documentId - Reserved document UUID
+ * @param errorMessage - Failure reason
+ */
+export async function markDocumentAsFailed(documentId: string, errorMessage: string): Promise<void> {
+  await updateDocumentStatus(documentId, 'failed', errorMessage);
 }
 
 /**
@@ -135,7 +236,7 @@ export async function ingestContent(
   input: IngestionInput,
   onProgress?: (stage: string, detail?: string) => void,
 ): Promise<IngestionResult> {
-  let documentId: string | undefined;
+  const documentId = input.documentId;
 
   try {
     onProgress?.('chunking', 'Splitting text into chunks');
@@ -144,8 +245,10 @@ export async function ingestContent(
     const chunks = chunkText(input.text);
 
     if (chunks.length === 0) {
+      await updateDocumentStatus(documentId, 'failed', 'No content to process after text extraction.');
       return {
         success: false,
+        documentId,
         error: 'No content to process after text extraction.',
         errorCode: 'EMPTY_CONTENT',
       };
@@ -153,8 +256,14 @@ export async function ingestContent(
 
     // Enforce chunk limit
     if (chunks.length > MAX_CHUNKS_PER_DOCUMENT) {
+      await updateDocumentStatus(
+        documentId,
+        'failed',
+        `Document exceeds ${MAX_CHUNKS_PER_DOCUMENT} chunk limit (${chunks.length} chunks). Please use a smaller document.`,
+      );
       return {
         success: false,
+        documentId,
         error: `Document exceeds ${MAX_CHUNKS_PER_DOCUMENT} chunk limit (${chunks.length} chunks). Please use a smaller document.`,
         errorCode: 'CHUNK_LIMIT_EXCEEDED',
       };
@@ -162,23 +271,23 @@ export async function ingestContent(
 
     logger.info('Text chunked', { chunkCount: chunks.length });
 
-    // Step 2: Create document record with "processing" status
-    onProgress?.('creating', 'Creating document record');
+    // Step 2: Update reserved document and mark processing
+    onProgress?.('creating', 'Updating reserved document record');
 
-    const documentData: NewDocument = {
-      userId: input.userId,
-      title: input.title,
-      contentType: input.contentType,
-      sourceUrl: input.sourceUrl,
-      originalFilename: input.originalFilename,
-      status: 'processing',
-      chunkCount: chunks.length,
-    };
+    await db.update(documentsSchema)
+      .set({
+        title: input.title,
+        contentType: input.contentType,
+        sourceUrl: input.sourceUrl,
+        originalFilename: input.originalFilename,
+        status: 'processing',
+        chunkCount: chunks.length,
+        errorMessage: null,
+        processedAt: null,
+      })
+      .where(eq(documentsSchema.id, documentId));
 
-    const [document] = await db.insert(documentsSchema).values(documentData).returning({ id: documentsSchema.id });
-    documentId = document!.id;
-
-    logger.info('Document created', { documentId, chunkCount: chunks.length });
+    logger.info('Reserved document updated', { documentId, chunkCount: chunks.length });
 
     // Step 3: Generate embeddings (with rate limiting)
     onProgress?.('embedding', `Generating embeddings for ${chunks.length} chunks`);
@@ -231,7 +340,7 @@ export async function ingestContent(
       values: embeddings[index]!,
       metadata: {
         user_id: input.userId,
-        document_id: documentId!,
+        document_id: documentId,
         chunk_position: chunk.position,
         content_type: input.contentType,
         created_at: new Date().toISOString(),
@@ -263,13 +372,11 @@ export async function ingestContent(
   } catch (error) {
     logger.error('Content ingestion failed', { documentId, error });
 
-    if (documentId) {
-      await updateDocumentStatus(
-        documentId,
-        'failed',
-        'An unexpected error occurred during processing.',
-      );
-    }
+    await updateDocumentStatus(
+      documentId,
+      'failed',
+      'An unexpected error occurred during processing.',
+    );
 
     return {
       success: false,

@@ -1,21 +1,20 @@
 import { Buffer } from 'node:buffer';
 
-import { count, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import * as z from 'zod';
 
 import { requireUser } from '@/libs/Auth';
-import { ingestContent } from '@/libs/ContentIngestion';
-import { db } from '@/libs/DB';
+import {
+  ingestContent,
+  markDocumentAsFailed,
+  reserveDocumentSlot,
+} from '@/libs/ContentIngestion';
 import { logger } from '@/libs/Logger';
 import { processPdf } from '@/libs/PdfExtractor';
 import { sanitizeText } from '@/libs/Sanitizer';
 import { extractUrlContent } from '@/libs/UrlExtractor';
-import { documentsSchema } from '@/models/Schema';
 import { DocumentUploadSchema } from '@/validations/DocumentValidation';
 
-// Document quota per user
-const MAX_DOCUMENTS_PER_USER = 50;
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 
 /**
@@ -27,23 +26,6 @@ export async function POST(request: Request) {
   try {
     // Authenticate user
     const user = await requireUser();
-
-    // Check document quota
-    const [quotaResult] = await db
-      .select({ count: count() })
-      .from(documentsSchema)
-      .where(eq(documentsSchema.userId, user.id));
-
-    const currentCount = quotaResult?.count ?? 0;
-    if (currentCount >= MAX_DOCUMENTS_PER_USER) {
-      return NextResponse.json(
-        {
-          error: 'QUOTA_EXCEEDED',
-          message: `You've reached the ${MAX_DOCUMENTS_PER_USER} document limit. Delete some documents to upload more.`,
-        },
-        { status: 429 },
-      );
-    }
 
     // Determine content type
     const contentType = request.headers.get('content-type') || '';
@@ -109,6 +91,35 @@ async function handlePdfUpload(request: Request, userId: string) {
     );
   }
 
+  // Determine title
+  const documentTitle = typeof title === 'string' && title.length > 0
+    ? title.slice(0, 200)
+    : file.name.replace(/\.pdf$/i, '').slice(0, 200) || 'Untitled PDF';
+
+  // Reserve document slot atomically (quota-safe)
+  const reservation = await reserveDocumentSlot({
+    userId,
+    title: documentTitle,
+    contentType: 'pdf',
+    originalFilename: file.name,
+  });
+
+  if (!reservation.success || !reservation.documentId) {
+    if (reservation.errorCode === 'QUOTA_EXCEEDED') {
+      return NextResponse.json(
+        { error: 'QUOTA_EXCEEDED', message: reservation.error },
+        { status: 429 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: reservation.errorCode ?? 'INTERNAL_ERROR', message: reservation.error ?? 'Failed to reserve document slot.' },
+      { status: 422 },
+    );
+  }
+
+  const documentId = reservation.documentId;
+
   // Read file buffer
   const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -116,19 +127,16 @@ async function handlePdfUpload(request: Request, userId: string) {
   const extraction = await processPdf(buffer);
 
   if (!extraction.success) {
+    await markDocumentAsFailed(documentId, extraction.error ?? 'Failed to process PDF.');
     return NextResponse.json(
       { error: extraction.errorCode, message: extraction.error },
       { status: 422 },
     );
   }
 
-  // Determine title
-  const documentTitle = typeof title === 'string' && title.length > 0
-    ? title.slice(0, 200)
-    : file.name.replace(/\.pdf$/i, '').slice(0, 200) || 'Untitled PDF';
-
   // Ingest content
   const result = await ingestContent({
+    documentId,
     userId,
     title: documentTitle,
     contentType: 'pdf',
@@ -137,6 +145,7 @@ async function handlePdfUpload(request: Request, userId: string) {
   });
 
   if (!result.success) {
+    await markDocumentAsFailed(documentId, result.error ?? 'Content ingestion failed.');
     return NextResponse.json(
       { error: result.errorCode, message: result.error },
       { status: 422 },
@@ -184,9 +193,35 @@ async function handleUrlUpload(
   data: z.infer<typeof DocumentUploadSchema> & { type: 'url' },
   userId: string,
 ) {
+  const fallbackTitle = data.title || new URL(data.url).hostname;
+
+  // Reserve document slot atomically (quota-safe)
+  const reservation = await reserveDocumentSlot({
+    userId,
+    title: fallbackTitle.slice(0, 200),
+    contentType: 'url',
+    sourceUrl: data.url,
+  });
+
+  if (!reservation.success || !reservation.documentId) {
+    if (reservation.errorCode === 'QUOTA_EXCEEDED') {
+      return NextResponse.json(
+        { error: 'QUOTA_EXCEEDED', message: reservation.error },
+        { status: 429 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: reservation.errorCode ?? 'INTERNAL_ERROR', message: reservation.error ?? 'Failed to reserve document slot.' },
+      { status: 422 },
+    );
+  }
+
+  const documentId = reservation.documentId;
   const extraction = await extractUrlContent(data.url);
 
   if (!extraction.success) {
+    await markDocumentAsFailed(documentId, extraction.error ?? 'Failed to extract URL content.');
     return NextResponse.json(
       { error: extraction.errorCode, message: extraction.error },
       { status: 422 },
@@ -199,6 +234,7 @@ async function handleUrlUpload(
     || new URL(data.url).hostname;
 
   const result = await ingestContent({
+    documentId,
     userId,
     title: documentTitle.slice(0, 200),
     contentType: 'url',
@@ -207,6 +243,7 @@ async function handleUrlUpload(
   });
 
   if (!result.success) {
+    await markDocumentAsFailed(documentId, result.error ?? 'Content ingestion failed.');
     return NextResponse.json(
       { error: result.errorCode, message: result.error },
       { status: 422 },
@@ -239,7 +276,31 @@ async function handleTextUpload(
     );
   }
 
+  // Reserve document slot atomically (quota-safe)
+  const reservation = await reserveDocumentSlot({
+    userId,
+    title: data.title.slice(0, 200),
+    contentType: 'text',
+  });
+
+  if (!reservation.success || !reservation.documentId) {
+    if (reservation.errorCode === 'QUOTA_EXCEEDED') {
+      return NextResponse.json(
+        { error: 'QUOTA_EXCEEDED', message: reservation.error },
+        { status: 429 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: reservation.errorCode ?? 'INTERNAL_ERROR', message: reservation.error ?? 'Failed to reserve document slot.' },
+      { status: 422 },
+    );
+  }
+
+  const documentId = reservation.documentId;
+
   const result = await ingestContent({
+    documentId,
     userId,
     title: data.title.slice(0, 200),
     contentType: 'text',
@@ -247,6 +308,7 @@ async function handleTextUpload(
   });
 
   if (!result.success) {
+    await markDocumentAsFailed(documentId, result.error ?? 'Content ingestion failed.');
     return NextResponse.json(
       { error: result.errorCode, message: result.error },
       { status: 422 },
