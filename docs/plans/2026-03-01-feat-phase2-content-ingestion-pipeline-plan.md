@@ -256,7 +256,7 @@ export async function validateUrl(urlString: string): Promise<{
 
 **Tasks:**
 
-- [ ] Create text chunker
+- [x] Create text chunker
   - File: `src/libs/TextChunker.ts`
   - Recursive character splitting
   - Target: ~500 tokens (~2000 chars)
@@ -264,7 +264,7 @@ export async function validateUrl(urlString: string): Promise<{
   - Sentence-aware boundaries
   - Handle Italian abbreviations (dott., sig., ecc.)
 
-- [ ] Create chunk position tracking
+- [x] Create chunk position tracking
   - Track start/end character positions
   - Track chunk sequence number
 
@@ -309,10 +309,10 @@ export function chunkText(text: string, options?: {
 ```
 
 **Acceptance Criteria:**
-- [ ] Chunks respect token limits
-- [ ] Overlap preserves context
-- [ ] Italian sentence boundaries respected
-- [ ] Chunk positions tracked accurately
+- [x] Chunks respect token limits
+- [x] Overlap preserves context
+- [x] Italian sentence boundaries respected
+- [x] Chunk positions tracked accurately
 
 ---
 
@@ -322,17 +322,17 @@ export function chunkText(text: string, options?: {
 
 **Tasks:**
 
-- [ ] Create content ingestion orchestrator
+- [x] Create content ingestion orchestrator
   - File: `src/libs/ContentIngestion.ts`
   - Coordinate extraction → chunking → embedding → storage
   - Update document status through lifecycle
   - On partial failure: set document status to "failed", store error message, skip Pinecone upsert for failed batch, leave successfully stored chunks in place (no rollback)
 
-- [ ] Implement database transactions
+- [x] Implement database transactions
   - Create document + chunks in single transaction
   - Store Pinecone IDs in chunks table
 
-- [ ] Implement Pinecone batch upsert
+- [x] Implement Pinecone batch upsert
   - Batch 100 vectors per upsert (Pinecone recommendation)
   - Generate deterministic IDs: `{documentId}_chunk_{position}`
 
@@ -345,10 +345,10 @@ uploading ──▶ processing ──▶ ready
 ```
 
 **Acceptance Criteria:**
-- [ ] Document status updates correctly
-- [ ] Chunks stored in both PostgreSQL and Pinecone
-- [ ] Pinecone IDs match chunk records
-- [ ] Failures set document to "failed" with message
+- [x] Document status updates correctly
+- [x] Chunks stored in both PostgreSQL and Pinecone
+- [x] Pinecone IDs match chunk records
+- [x] Failures set document to "failed" with message
 
 ---
 
@@ -358,7 +358,7 @@ uploading ──▶ processing ──▶ ready
 
 **Tasks:**
 
-- [ ] Create upload route handler
+- [x] Create upload route handler
   - File: `src/app/[locale]/api/documents/upload/route.ts`
   - Accept FormData (PDF) or JSON (URL/text)
   - Validate user authentication
@@ -366,7 +366,7 @@ uploading ──▶ processing ──▶ ready
   - Dispatch to appropriate extractor
   - Return document ID and initial status
 
-- [ ] Create document status endpoint
+- [x] Create document status endpoint
   - File: `src/app/[locale]/api/documents/[id]/route.ts`
   - GET: Return document with status
   - DELETE: Remove document and cleanup vectors
@@ -398,11 +398,11 @@ export const DocumentUploadSchema = z.discriminatedUnion('type', [
 ```
 
 **Acceptance Criteria:**
-- [ ] PDF upload via FormData works
-- [ ] URL import via JSON works
-- [ ] Text paste via JSON works
-- [ ] Quota enforcement works
-- [ ] Status endpoint returns current state
+- [x] PDF upload via FormData works
+- [x] URL import via JSON works
+- [x] Text paste via JSON works
+- [x] Quota enforcement works
+- [x] Status endpoint returns current state
 
 ---
 
@@ -412,12 +412,12 @@ export const DocumentUploadSchema = z.discriminatedUnion('type', [
 
 **Tasks:**
 
-- [ ] Create document list endpoint
+- [x] Create document list endpoint
   - File: `src/app/[locale]/api/documents/route.ts`
   - GET: List user's documents with status
   - Include chunk count, created date
 
-- [ ] Implement document deletion
+- [x] Implement document deletion
   - DELETE: Remove document, chunks, and Pinecone vectors
   - Use database cascade for chunks
   - Delete Pinecone vectors by prefix filter
@@ -433,10 +433,10 @@ await index.deleteMany({
 ```
 
 **Acceptance Criteria:**
-- [ ] Documents listed correctly
-- [ ] Deletion removes all related data
-- [ ] Pinecone vectors cleaned up
-- [ ] Quota freed after deletion
+- [x] Documents listed correctly
+- [x] Deletion removes all related data
+- [x] Pinecone vectors cleaned up
+- [x] Quota freed after deletion
 
 ---
 
