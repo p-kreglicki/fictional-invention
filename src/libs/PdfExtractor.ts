@@ -26,6 +26,11 @@ class TimeoutError extends Error {
 
 /**
  * Wraps a promise with a timeout.
+ * NOTE: This uses Promise.race which does not cancel the underlying operation.
+ * Timed-out PDF work may continue in background until natural completion.
+ * The unpdf library does not expose cancellation APIs.
+ * Under repeated slow/malformed inputs, this can accumulate CPU/memory pressure.
+ * Mitigations: page count limit, proxy.destroy() in finally block.
  * @param promise - Promise to wrap
  * @param timeoutMs - Timeout in milliseconds
  * @returns Promise that rejects with TimeoutError if timeout exceeded
