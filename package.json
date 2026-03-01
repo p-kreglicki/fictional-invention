@@ -31,7 +31,8 @@
     "storybook:test": "vitest run --config .storybook/vitest.config.mts",
     "build-storybook": "storybook build",
     "verify:setup": "npx tsx scripts/verify-setup.ts",
-    "pinecone:init": "npx tsx scripts/init-pinecone.ts"
+    "pinecone:init": "npx tsx scripts/init-pinecone.ts",
+    "sync:users": "npx tsx scripts/sync-clerk-users.ts"
   },
   "dependencies": {
     "@arcjet/next": "^1.0.0",
