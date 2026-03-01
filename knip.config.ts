@@ -18,6 +18,7 @@ const config: KnipConfig = {
   ignoreDependencies: [
     '@commitlint/types',
     '@clerk/types',
+    '@swc/helpers', // Transitive dependency required by Next.js
     'conventional-changelog-conventionalcommits',
     'vite',
     'postcss-load-config',
