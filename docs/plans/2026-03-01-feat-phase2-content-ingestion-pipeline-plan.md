@@ -52,6 +52,7 @@ Build a secure content ingestion pipeline that accepts user uploads (PDF files, 
 | Chunk Overlap | 50 tokens (~200 chars) | Context preservation without excessive duplication |
 | Token Counting | `mistral-tokenizer-ts` | Accurate for Mistral models (20% variance from tiktoken) |
 | Processing | Synchronous with limits | Simple for MVP; async queue for v2 |
+| Rate limit delay | 31 seconds between batches | 2 req/min = 30s minimum; +1s buffer for clock drift |
 
 ### Processing Constraints
 
@@ -61,6 +62,14 @@ Build a secure content ingestion pipeline that accepts user uploads (PDF files, 
 | Max chunks/document | 50 | ~25,000 tokens max per document |
 | Max processing time | ~2 minutes | Fits within Vercel Pro timeout |
 | Document quota | 50/user | Enforced before document creation |
+
+---
+
+## Prerequisites
+
+- Database schema includes `documents` and `chunks` tables (created in Phase 1)
+- `src/libs/Mistral.ts` client configured with embedding support
+- `src/libs/Pinecone.ts` client configured with index access
 
 ---
 
@@ -317,7 +326,7 @@ export function chunkText(text: string, options?: {
   - File: `src/libs/ContentIngestion.ts`
   - Coordinate extraction → chunking → embedding → storage
   - Update document status through lifecycle
-  - Handle partial failures gracefully
+  - On partial failure: set document status to "failed", store error message, skip Pinecone upsert for failed batch, leave successfully stored chunks in place (no rollback)
 
 - [ ] Implement database transactions
   - Create document + chunks in single transaction
