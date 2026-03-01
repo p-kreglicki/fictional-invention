@@ -32,6 +32,7 @@ export default antfu(
       'migrations/**/*',
       'docs/**/*',
       'scripts/**/*',
+      '**/*.md',
     ],
   },
   // --- Accessibility Rules ---
