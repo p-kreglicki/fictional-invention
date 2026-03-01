@@ -322,17 +322,17 @@ export function chunkText(text: string, options?: {
 
 **Tasks:**
 
-- [ ] Create content ingestion orchestrator
+- [x] Create content ingestion orchestrator
   - File: `src/libs/ContentIngestion.ts`
   - Coordinate extraction → chunking → embedding → storage
   - Update document status through lifecycle
   - On partial failure: set document status to "failed", store error message, skip Pinecone upsert for failed batch, leave successfully stored chunks in place (no rollback)
 
-- [ ] Implement database transactions
+- [x] Implement database transactions
   - Create document + chunks in single transaction
   - Store Pinecone IDs in chunks table
 
-- [ ] Implement Pinecone batch upsert
+- [x] Implement Pinecone batch upsert
   - Batch 100 vectors per upsert (Pinecone recommendation)
   - Generate deterministic IDs: `{documentId}_chunk_{position}`
 
@@ -345,10 +345,10 @@ uploading ──▶ processing ──▶ ready
 ```
 
 **Acceptance Criteria:**
-- [ ] Document status updates correctly
-- [ ] Chunks stored in both PostgreSQL and Pinecone
-- [ ] Pinecone IDs match chunk records
-- [ ] Failures set document to "failed" with message
+- [x] Document status updates correctly
+- [x] Chunks stored in both PostgreSQL and Pinecone
+- [x] Pinecone IDs match chunk records
+- [x] Failures set document to "failed" with message
 
 ---
 

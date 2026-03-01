@@ -52,7 +52,7 @@ const ITALIAN_ABBREVIATIONS = new Set([
   'ecc', // eccetera
 ]);
 
-type Chunk = {
+export type Chunk = {
   text: string;
   position: number;
   startChar: number;
