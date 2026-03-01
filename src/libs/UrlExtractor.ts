@@ -284,10 +284,10 @@ export async function extractUrlContent(urlString: string): Promise<UrlExtractio
 }
 
 /**
- * Checks if a URL likely points to readable HTML content.
- * Quick check without full extraction.
+ * Checks if a URL points to readable HTML content.
+ * Performs full extraction to verify readability.
  * @param urlString - URL to check
- * @returns True if URL likely has readable content
+ * @returns True if content was successfully extracted
  */
 export async function hasReadableContent(urlString: string): Promise<boolean> {
   const result = await extractUrlContent(urlString);
