@@ -171,6 +171,40 @@ describe('validateUrl', () => {
     expect(result.resolvedIps).toHaveLength(2);
   });
 
+  it('resolves IPv4 and IPv6 in parallel', async () => {
+    let resolve4Started = false;
+    let resolve6Started = false;
+    let resolve4Done: ((value: string[]) => void) | undefined;
+    let resolve6Done: ((value: string[]) => void) | undefined;
+
+    mockResolve4.mockImplementation(() => {
+      resolve4Started = true;
+      return new Promise<string[]>((resolve) => {
+        resolve4Done = resolve;
+      });
+    });
+
+    mockResolve6.mockImplementation(() => {
+      resolve6Started = true;
+      return new Promise<string[]>((resolve) => {
+        resolve6Done = resolve;
+      });
+    });
+
+    const validationPromise = validateUrl('https://example.com');
+
+    expect(resolve4Started).toBe(true);
+    expect(resolve6Started).toBe(true);
+
+    resolve4Done?.(['93.184.216.34']);
+    resolve6Done?.(['2606:2800:220:1:248:1893:25c8:1946']);
+
+    const result = await validationPromise;
+
+    expect(result.valid).toBe(true);
+    expect(result.resolvedIps).toHaveLength(2);
+  });
+
   it('rejects if any resolved IP is blocked', async () => {
     // Public IPv4 but loopback IPv6
     mockResolve4.mockResolvedValue(['93.184.216.34']);

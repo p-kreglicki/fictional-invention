@@ -91,13 +91,12 @@ export async function validateUrl(urlString: string): Promise<UrlValidationResul
   const resolvedIps: string[] = [];
 
   try {
-    // Resolve IPv4 addresses
-    const ipv4Addresses = await dns.resolve4(url.hostname).catch(() => []);
-    resolvedIps.push(...ipv4Addresses);
-
-    // Resolve IPv6 addresses
-    const ipv6Addresses = await dns.resolve6(url.hostname).catch(() => []);
-    resolvedIps.push(...ipv6Addresses);
+    // Resolve IPv4 and IPv6 in parallel to reduce validation latency.
+    const [ipv4Addresses, ipv6Addresses] = await Promise.all([
+      dns.resolve4(url.hostname).catch(() => []),
+      dns.resolve6(url.hostname).catch(() => []),
+    ]);
+    resolvedIps.push(...ipv4Addresses, ...ipv6Addresses);
 
     // Must resolve to at least one IP
     if (resolvedIps.length === 0) {
