@@ -23,6 +23,7 @@ const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 const UPLOAD_RATE_LIMIT_MAX_REQUESTS = Env.UPLOAD_RATE_LIMIT_MAX_REQUESTS ?? 10;
 const UPLOAD_RATE_LIMIT_WINDOW_SECONDS = Env.UPLOAD_RATE_LIMIT_WINDOW_SECONDS ?? 60;
 const MAX_CONCURRENT_DEFERRED_JOBS = 10;
+const MAX_PENDING_JOBS = 50;
 const QUEUE_WARNING_THRESHOLD = 20;
 
 const uploadRateLimiter = arcjet.withRule(
@@ -101,6 +102,19 @@ function createReservationErrorResponse(input: {
     { error: input.errorCode ?? 'INTERNAL_ERROR', message: input.error ?? 'Failed to reserve document slot.' },
     { status: 422 },
   );
+}
+
+/**
+ * Builds a 503 response for when the deferred job queue is at capacity.
+ * @returns API response indicating the server is temporarily overloaded
+ */
+function createQueueFullResponse() {
+  const response = NextResponse.json(
+    { error: 'SERVICE_OVERLOADED', message: 'Upload queue is at capacity. Please retry shortly.' },
+    { status: 503 },
+  );
+  response.headers.set('Retry-After', '30');
+  return response;
 }
 
 /**
@@ -198,12 +212,24 @@ function startDeferredJob(input: DeferredUploadJob) {
 
 /**
  * Queues a deferred upload job with bounded concurrency.
+ * Returns false when the pending queue is full; the caller must mark the document
+ * as failed and respond with 503.
  * @param input - Deferred upload job payload
+ * @returns True when the job was accepted, false when the queue is at capacity
  */
-function queueDeferredUpload(input: DeferredUploadJob) {
+function queueDeferredUpload(input: DeferredUploadJob): boolean {
   if (activeJobs < MAX_CONCURRENT_DEFERRED_JOBS) {
     startDeferredJob(input);
-    return;
+    return true;
+  }
+
+  if (pendingJobs.length >= MAX_PENDING_JOBS) {
+    logger.warn('Deferred job queue full, rejecting job', {
+      documentId: input.documentId,
+      activeJobs,
+      pendingJobs: pendingJobs.length,
+    });
+    return false;
   }
 
   pendingJobs.push(input);
@@ -219,6 +245,8 @@ function queueDeferredUpload(input: DeferredUploadJob) {
       activeJobs,
     });
   }
+
+  return true;
 }
 
 /**
@@ -348,16 +376,17 @@ async function handlePdfUpload(request: Request, userId: string) {
   }
 
   const documentId = reservation.documentId;
-  const buffer = Buffer.from(await file.arrayBuffer());
+  let buffer: Buffer | undefined = Buffer.from(await file.arrayBuffer());
 
-  queueDeferredUpload({
+  const queued = queueDeferredUpload({
     documentId,
     userId,
     title: documentTitle,
     contentType: 'pdf',
     originalFilename: file.name,
     extractText: async () => {
-      const extraction = await processPdf(buffer);
+      const extraction = await processPdf(buffer!);
+      buffer = undefined;
       if (!extraction.success) {
         return {
           success: false,
@@ -371,6 +400,11 @@ async function handlePdfUpload(request: Request, userId: string) {
       };
     },
   });
+
+  if (!queued) {
+    await failDeferredDocument(documentId, 'Upload queue is at capacity.');
+    return createQueueFullResponse();
+  }
 
   return createAcceptedUploadResponse(documentId);
 }
@@ -428,7 +462,7 @@ async function handleUrlUpload(
 
   const documentId = reservation.documentId;
 
-  queueDeferredUpload({
+  const queued = queueDeferredUpload({
     documentId,
     userId,
     title: fallbackTitle.slice(0, 200),
@@ -450,6 +484,11 @@ async function handleUrlUpload(
       };
     },
   });
+
+  if (!queued) {
+    await failDeferredDocument(documentId, 'Upload queue is at capacity.');
+    return createQueueFullResponse();
+  }
 
   return createAcceptedUploadResponse(documentId);
 }
@@ -488,7 +527,8 @@ async function handleTextUpload(
   }
 
   const documentId = reservation.documentId;
-  queueDeferredUpload({
+
+  const queued = queueDeferredUpload({
     documentId,
     userId,
     title: data.title.slice(0, 200),
@@ -498,6 +538,11 @@ async function handleTextUpload(
       text: sanitized,
     }),
   });
+
+  if (!queued) {
+    await failDeferredDocument(documentId, 'Upload queue is at capacity.');
+    return createQueueFullResponse();
+  }
 
   return createAcceptedUploadResponse(documentId);
 }
