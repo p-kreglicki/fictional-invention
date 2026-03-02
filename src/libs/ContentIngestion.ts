@@ -213,6 +213,7 @@ export async function ingestContent(
   const documentId = input.documentId;
 
   try {
+    await updateDocumentStatus(documentId, 'processing');
     onProgress?.('chunking', 'Splitting text into chunks');
 
     // Step 1: Chunk the text
@@ -318,18 +319,72 @@ export async function ingestContent(
     // Step 4: Upsert vectors to Pinecone
     onProgress?.('indexing', 'Indexing vectors for search');
 
-    const vectors = storedChunks.map((chunk, index) => ({
-      id: chunk.pineconeId,
-      values: embeddings[index]!,
-      metadata: {
-        user_id: input.userId,
-        document_id: documentId,
-        chunk_position: chunk.position,
-        content_type: input.contentType,
-        created_at: new Date().toISOString(),
-        text: chunks[index]!.text,
-      } satisfies ChunkMetadata,
-    }));
+    if (
+      embeddings.length !== storedChunks.length
+      || chunks.length !== storedChunks.length
+    ) {
+      logger.error('Vector preparation length mismatch', {
+        documentId,
+        embeddings: embeddings.length,
+        storedChunks: storedChunks.length,
+        chunks: chunks.length,
+      });
+      await updateDocumentStatus(
+        documentId,
+        'failed',
+        'An unexpected error occurred during vector preparation.',
+      );
+      return {
+        success: false,
+        documentId,
+        error: 'Failed to prepare vectors for indexing.',
+        errorCode: 'STORAGE_FAILED',
+      };
+    }
+
+    const vectors: Array<{
+      id: string;
+      values: number[];
+      metadata: ChunkMetadata;
+    }> = [];
+
+    for (const [index, storedChunk] of storedChunks.entries()) {
+      const embedding = embeddings[index];
+      const sourceChunk = chunks[index];
+
+      if (!embedding || !sourceChunk) {
+        logger.error('Missing vector source data', {
+          documentId,
+          index,
+          hasEmbedding: Boolean(embedding),
+          hasSourceChunk: Boolean(sourceChunk),
+        });
+        await updateDocumentStatus(
+          documentId,
+          'failed',
+          'An unexpected error occurred during vector preparation.',
+        );
+        return {
+          success: false,
+          documentId,
+          error: 'Failed to prepare vectors for indexing.',
+          errorCode: 'STORAGE_FAILED',
+        };
+      }
+
+      vectors.push({
+        id: storedChunk.pineconeId,
+        values: embedding,
+        metadata: {
+          user_id: input.userId,
+          document_id: documentId,
+          chunk_position: storedChunk.position,
+          content_type: input.contentType,
+          created_at: new Date().toISOString(),
+          text: sourceChunk.text,
+        } satisfies ChunkMetadata,
+      });
+    }
 
     try {
       await upsertToPinecone(vectors);

@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
-import { requireUser } from '@/libs/Auth';
+import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { deleteDocument } from '@/libs/ContentIngestion';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
@@ -22,23 +22,18 @@ export async function GET(_request: Request, props: RouteParams) {
     const user = await requireUser();
     const { id } = await props.params;
 
-    // Fetch document
+    // Fetch document scoped to authenticated user to avoid existence leaks
     const document = await db.query.documentsSchema.findFirst({
-      where: eq(documentsSchema.id, id),
+      where: and(
+        eq(documentsSchema.id, id),
+        eq(documentsSchema.userId, user.id),
+      ),
     });
 
     if (!document) {
       return NextResponse.json(
         { error: 'NOT_FOUND', message: 'Document not found' },
         { status: 404 },
-      );
-    }
-
-    // Verify ownership
-    if (document.userId !== user.id) {
-      return NextResponse.json(
-        { error: 'FORBIDDEN', message: 'Access denied' },
-        { status: 403 },
       );
     }
 
@@ -58,10 +53,17 @@ export async function GET(_request: Request, props: RouteParams) {
   } catch (error) {
     logger.error('Failed to get document', { error });
 
-    if (error instanceof Error && error.message.includes('Authentication')) {
+    if (error instanceof AuthenticationError) {
       return NextResponse.json(
         { error: 'UNAUTHORIZED', message: 'Authentication required' },
         { status: 401 },
+      );
+    }
+
+    if (error instanceof UserNotFoundError) {
+      return NextResponse.json(
+        { error: 'USER_NOT_FOUND', message: 'User account not synced. Please try again.' },
+        { status: 403 },
       );
     }
 
@@ -96,10 +98,17 @@ export async function DELETE(_request: Request, props: RouteParams) {
   } catch (error) {
     logger.error('Failed to delete document', { error });
 
-    if (error instanceof Error && error.message.includes('Authentication')) {
+    if (error instanceof AuthenticationError) {
       return NextResponse.json(
         { error: 'UNAUTHORIZED', message: 'Authentication required' },
         { status: 401 },
+      );
+    }
+
+    if (error instanceof UserNotFoundError) {
+      return NextResponse.json(
+        { error: 'USER_NOT_FOUND', message: 'User account not synced. Please try again.' },
+        { status: 403 },
       );
     }
 

@@ -3,6 +3,7 @@ import {
   HTTPValidationError,
   SDKValidationError,
 } from '@mistralai/mistralai/models/errors';
+import { EMBEDDING_DIMENSION, EMBEDDING_MODEL } from './EmbeddingConfig';
 import { Env } from './Env';
 import { logger } from './Logger';
 
@@ -39,9 +40,7 @@ if (Env.NODE_ENV !== 'production' && mistral) {
 }
 
 // Constants
-const MISTRAL_EMBED_MODEL = 'mistral-embed';
 const MAX_BATCH_SIZE = 16;
-export const MISTRAL_EMBED_DIMENSION = 1024;
 
 // Types
 export type EmbeddingResult = {
@@ -73,7 +72,7 @@ export async function createEmbeddings(texts: string[]): Promise<EmbeddingResult
 
   try {
     const result = await mistral.embeddings.create({
-      model: MISTRAL_EMBED_MODEL,
+      model: EMBEDDING_MODEL,
       inputs: texts,
     });
 
@@ -132,7 +131,7 @@ export async function createEmbeddingsBatched(
 export async function verifyConnection(): Promise<boolean> {
   try {
     const result = await createEmbeddings(['test']);
-    return result.embeddings.length === 1 && result.embeddings[0]!.length === MISTRAL_EMBED_DIMENSION;
+    return result.embeddings.length === 1 && result.embeddings[0]!.length === EMBEDDING_DIMENSION;
   } catch {
     return false;
   }

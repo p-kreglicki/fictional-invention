@@ -3,6 +3,20 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { usersSchema } from '@/models/Schema';
 
+export class AuthenticationError extends Error {
+  constructor() {
+    super('Authentication required');
+    this.name = 'AuthenticationError';
+  }
+}
+
+export class UserNotFoundError extends Error {
+  constructor() {
+    super('User not found in database. Webhook may not have synced yet.');
+    this.name = 'UserNotFoundError';
+  }
+}
+
 /**
  * Get the current authenticated user from the database.
  * Returns null if not authenticated or user not found.
@@ -26,10 +40,16 @@ export async function getCurrentUser() {
  * Use in protected routes where auth is guaranteed.
  */
 export async function requireUser() {
-  const user = await getCurrentUser();
+  const userId = await getClerkUserId();
+  if (!userId) {
+    throw new AuthenticationError();
+  }
 
+  const user = await db.query.usersSchema.findFirst({
+    where: eq(usersSchema.clerkId, userId),
+  });
   if (!user) {
-    throw new Error('User not found in database. Webhook may not have synced yet.');
+    throw new UserNotFoundError();
   }
 
   return user;
@@ -51,7 +71,7 @@ export async function requireAuth(): Promise<string> {
   const userId = await getClerkUserId();
 
   if (!userId) {
-    throw new Error('Authentication required');
+    throw new AuthenticationError();
   }
 
   return userId;

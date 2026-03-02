@@ -198,6 +198,49 @@ describe('extractUrlContent', () => {
     expect(result.success).toBe(true);
     expect(result.text).toBeDefined();
   });
+
+  it('limits concurrent URL fetches to bound memory usage', async () => {
+    let activeFetches = 0;
+    let peakConcurrentFetches = 0;
+    const pendingResolvers: Array<() => void> = [];
+
+    mockFetch.mockImplementation(async () => {
+      activeFetches += 1;
+      peakConcurrentFetches = Math.max(peakConcurrentFetches, activeFetches);
+
+      await new Promise<void>((resolve) => {
+        pendingResolvers.push(resolve);
+      });
+
+      activeFetches -= 1;
+      return createMockResponse({ body: READABLE_HTML });
+    });
+
+    const operations = Array.from({ length: 6 }, (_, index) => (
+      extractUrlContent(`https://example.com/article-${index}`)
+    ));
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(peakConcurrentFetches).toBe(5);
+    expect(pendingResolvers).toHaveLength(5);
+
+    const initialResolvers = pendingResolvers.splice(0, 5);
+    for (const resolve of initialResolvers) {
+      resolve();
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(peakConcurrentFetches).toBe(5);
+    expect(pendingResolvers).toHaveLength(1);
+
+    pendingResolvers[0]?.();
+
+    const results = await Promise.all(operations);
+
+    expect(results.every(result => result.success)).toBe(true);
+  });
 });
 
 describe('hasReadableContent', () => {

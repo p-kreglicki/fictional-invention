@@ -52,11 +52,17 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 }
 
 export type PdfExtractionResult = {
-  success: boolean;
-  text?: string;
+  success: true;
+  text: string;
+  pageCount: number;
+  error?: undefined;
+  errorCode?: undefined;
+} | {
+  success: false;
+  text?: undefined;
   pageCount?: number;
-  error?: string;
-  errorCode?: 'PASSWORD_PROTECTED' | 'NO_TEXT' | 'EXTRACTION_FAILED' | 'PAGE_LIMIT_EXCEEDED' | 'TIMEOUT' | 'VALIDATION_FAILED';
+  error: string;
+  errorCode: 'PASSWORD_PROTECTED' | 'NO_TEXT' | 'EXTRACTION_FAILED' | 'PAGE_LIMIT_EXCEEDED' | 'TIMEOUT' | 'VALIDATION_FAILED';
 };
 
 /**
@@ -184,7 +190,7 @@ export async function processPdf(
   if (!validation.valid) {
     return {
       success: false,
-      error: validation.error,
+      error: validation.error ?? 'Invalid PDF file.',
       errorCode: 'VALIDATION_FAILED',
     };
   }
