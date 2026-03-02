@@ -37,6 +37,7 @@ export async function GET() {
         title: doc.title,
         contentType: doc.contentType,
         status: doc.status,
+        searchable: doc.status === 'ready',
         chunkCount: doc.chunkCount,
         errorMessage: doc.errorMessage,
         sourceUrl: doc.sourceUrl,

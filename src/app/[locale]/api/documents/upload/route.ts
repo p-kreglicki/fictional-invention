@@ -155,7 +155,8 @@ async function handlePdfUpload(request: Request, userId: string) {
   return NextResponse.json({
     documentId: result.documentId,
     chunkCount: result.chunkCount,
-    status: 'ready',
+    status: result.status ?? 'ready',
+    searchable: result.searchable ?? result.status === 'ready',
   }, { status: 201 });
 }
 
@@ -253,7 +254,8 @@ async function handleUrlUpload(
   return NextResponse.json({
     documentId: result.documentId,
     chunkCount: result.chunkCount,
-    status: 'ready',
+    status: result.status ?? 'ready',
+    searchable: result.searchable ?? result.status === 'ready',
   }, { status: 201 });
 }
 
@@ -318,6 +320,7 @@ async function handleTextUpload(
   return NextResponse.json({
     documentId: result.documentId,
     chunkCount: result.chunkCount,
-    status: 'ready',
+    status: result.status ?? 'ready',
+    searchable: result.searchable ?? result.status === 'ready',
   }, { status: 201 });
 }

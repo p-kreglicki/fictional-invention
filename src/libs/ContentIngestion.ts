@@ -5,7 +5,6 @@
 
 import type { ChunkMetadata } from './Pinecone';
 
-import type { Chunk } from './TextChunker';
 import type { NewChunk, NewDocument } from '@/models/Schema';
 
 import { count, eq, sql } from 'drizzle-orm';
@@ -38,6 +37,8 @@ type IngestionResult = {
   success: boolean;
   documentId?: string;
   chunkCount?: number;
+  status?: 'ready' | 'failed';
+  searchable?: boolean;
   error?: string;
   errorCode?: 'CHUNK_LIMIT_EXCEEDED' | 'EMBEDDING_FAILED' | 'STORAGE_FAILED' | 'EMPTY_CONTENT';
 };
@@ -178,33 +179,6 @@ export async function markDocumentAsFailed(documentId: string, errorMessage: str
 }
 
 /**
- * Stores chunks in PostgreSQL.
- * @param documentId - The document UUID
- * @param chunks - Array of text chunks
- * @returns Array of created chunk records with IDs
- */
-async function storeChunksInDatabase(
-  documentId: string,
-  chunks: Chunk[],
-): Promise<{ id: string; pineconeId: string; position: number }[]> {
-  const chunkRecords: NewChunk[] = chunks.map(chunk => ({
-    documentId,
-    content: chunk.text,
-    position: chunk.position,
-    tokenCount: countTokensEstimate(chunk.text),
-    pineconeId: generatePineconeId(documentId, chunk.position),
-  }));
-
-  const result = await db.insert(chunksSchema).values(chunkRecords).returning({
-    id: chunksSchema.id,
-    pineconeId: chunksSchema.pineconeId,
-    position: chunksSchema.position,
-  });
-
-  return result;
-}
-
-/**
  * Upserts vectors to Pinecone in batches.
  * @param vectors - Array of vectors with metadata
  */
@@ -271,25 +245,7 @@ export async function ingestContent(
 
     logger.info('Text chunked', { chunkCount: chunks.length });
 
-    // Step 2: Update reserved document and mark processing
-    onProgress?.('creating', 'Updating reserved document record');
-
-    await db.update(documentsSchema)
-      .set({
-        title: input.title,
-        contentType: input.contentType,
-        sourceUrl: input.sourceUrl,
-        originalFilename: input.originalFilename,
-        status: 'processing',
-        chunkCount: chunks.length,
-        errorMessage: null,
-        processedAt: null,
-      })
-      .where(eq(documentsSchema.id, documentId));
-
-    logger.info('Reserved document updated', { documentId, chunkCount: chunks.length });
-
-    // Step 3: Generate embeddings (with rate limiting)
+    // Step 2: Generate embeddings (with rate limiting)
     onProgress?.('embedding', `Generating embeddings for ${chunks.length} chunks`);
 
     let embeddings: number[][];
@@ -313,12 +269,39 @@ export async function ingestContent(
 
     logger.info('Embeddings generated', { documentId, count: embeddings.length });
 
-    // Step 4: Store chunks in PostgreSQL
+    // Step 3: Update document and store chunks atomically
     onProgress?.('storing', 'Storing chunks in database');
 
     let storedChunks: { id: string; pineconeId: string; position: number }[];
     try {
-      storedChunks = await storeChunksInDatabase(documentId, chunks);
+      const chunkRecords: NewChunk[] = chunks.map(chunk => ({
+        documentId,
+        content: chunk.text,
+        position: chunk.position,
+        tokenCount: countTokensEstimate(chunk.text),
+        pineconeId: generatePineconeId(documentId, chunk.position),
+      }));
+
+      storedChunks = await db.transaction(async (tx) => {
+        await tx.update(documentsSchema)
+          .set({
+            title: input.title,
+            contentType: input.contentType,
+            sourceUrl: input.sourceUrl,
+            originalFilename: input.originalFilename,
+            status: 'processing',
+            chunkCount: chunks.length,
+            errorMessage: null,
+            processedAt: null,
+          })
+          .where(eq(documentsSchema.id, documentId));
+
+        return tx.insert(chunksSchema).values(chunkRecords).returning({
+          id: chunksSchema.id,
+          pineconeId: chunksSchema.pineconeId,
+          position: chunksSchema.position,
+        });
+      });
     } catch (error) {
       logger.error('Database storage failed', { documentId, error });
       await updateDocumentStatus(documentId, 'failed', 'Failed to store content. Please try again.');
@@ -330,9 +313,9 @@ export async function ingestContent(
       };
     }
 
-    logger.info('Chunks stored in database', { documentId, count: storedChunks.length });
+    logger.info('Document and chunks stored atomically', { documentId, count: storedChunks.length });
 
-    // Step 5: Upsert vectors to Pinecone
+    // Step 4: Upsert vectors to Pinecone
     onProgress?.('indexing', 'Indexing vectors for search');
 
     const vectors = storedChunks.map((chunk, index) => ({
@@ -352,14 +335,22 @@ export async function ingestContent(
       await upsertToPinecone(vectors);
     } catch (error) {
       logger.error('Pinecone upsert failed', { documentId, error });
-      // Don't fail the entire operation - chunks are in DB, just not searchable
-      // Update status to ready but log the issue
+      const errorMessage = 'Content stored, but indexing failed.';
+      await updateDocumentStatus(documentId, 'failed', errorMessage);
       logger.warn('Document stored but vector indexing failed', { documentId });
+      onProgress?.('complete', 'Content stored, but indexing failed');
+      return {
+        success: true,
+        documentId,
+        chunkCount: chunks.length,
+        status: 'failed',
+        searchable: false,
+      };
     }
 
     logger.info('Vectors upserted to Pinecone', { documentId, count: vectors.length });
 
-    // Step 6: Update document status to ready
+    // Step 5: Update document status to ready
     await updateDocumentStatus(documentId, 'ready');
 
     onProgress?.('complete', 'Content processed successfully');
@@ -368,6 +359,8 @@ export async function ingestContent(
       success: true,
       documentId,
       chunkCount: chunks.length,
+      status: 'ready',
+      searchable: true,
     };
   } catch (error) {
     logger.error('Content ingestion failed', { documentId, error });
@@ -395,30 +388,44 @@ export async function ingestContent(
  */
 export async function deleteDocument(documentId: string, userId: string): Promise<boolean> {
   try {
-    // Verify ownership
-    const [document] = await db.select({ id: documentsSchema.id, userId: documentsSchema.userId })
-      .from(documentsSchema)
-      .where(eq(documentsSchema.id, documentId));
+    const deletion = await db.transaction(async (tx) => {
+      const [document] = await tx.select({ id: documentsSchema.id, userId: documentsSchema.userId })
+        .from(documentsSchema)
+        .where(eq(documentsSchema.id, documentId));
 
-    if (!document || document.userId !== userId) {
+      if (!document || document.userId !== userId) {
+        return { deleted: false, pineconeIds: [] as string[] };
+      }
+
+      const chunks = await tx.select({ pineconeId: chunksSchema.pineconeId })
+        .from(chunksSchema)
+        .where(eq(chunksSchema.documentId, documentId));
+
+      await tx.delete(documentsSchema).where(eq(documentsSchema.id, documentId));
+
+      return {
+        deleted: true,
+        pineconeIds: chunks.map(chunk => chunk.pineconeId),
+      };
+    });
+
+    if (!deletion.deleted) {
       return false;
     }
 
-    // Get chunk Pinecone IDs before deletion
-    const chunks = await db.select({ pineconeId: chunksSchema.pineconeId })
-      .from(chunksSchema)
-      .where(eq(chunksSchema.documentId, documentId));
-
-    // Delete from Pinecone
-    if (chunks.length > 0) {
+    if (deletion.pineconeIds.length > 0) {
       const index = getNamespacedIndex();
-      const pineconeIds = chunks.map(c => c.pineconeId);
-      await index.deleteMany(pineconeIds);
-      logger.info('Deleted vectors from Pinecone', { documentId, count: pineconeIds.length });
+      try {
+        await index.deleteMany(deletion.pineconeIds);
+        logger.info('Deleted vectors from Pinecone', { documentId, count: deletion.pineconeIds.length });
+      } catch (error) {
+        logger.warn('Document deleted but Pinecone cleanup failed', {
+          documentId,
+          count: deletion.pineconeIds.length,
+          error,
+        });
+      }
     }
-
-    // Delete document (chunks cascade automatically)
-    await db.delete(documentsSchema).where(eq(documentsSchema.id, documentId));
 
     logger.info('Document deleted', { documentId });
     return true;
