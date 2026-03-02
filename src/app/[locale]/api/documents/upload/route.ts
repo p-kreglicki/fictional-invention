@@ -22,6 +22,8 @@ import { DocumentUploadSchema } from '@/validations/DocumentValidation';
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 const UPLOAD_RATE_LIMIT_MAX_REQUESTS = Env.UPLOAD_RATE_LIMIT_MAX_REQUESTS ?? 10;
 const UPLOAD_RATE_LIMIT_WINDOW_SECONDS = Env.UPLOAD_RATE_LIMIT_WINDOW_SECONDS ?? 60;
+const MAX_CONCURRENT_DEFERRED_JOBS = 10;
+const QUEUE_WARNING_THRESHOLD = 20;
 
 const uploadRateLimiter = arcjet.withRule(
   fixedWindow({
@@ -50,6 +52,9 @@ type DeferredUploadJob = {
   originalFilename?: string;
   extractText: () => Promise<DeferredExtractionResult>;
 };
+
+let activeJobs = 0;
+const pendingJobs: DeferredUploadJob[] = [];
 
 function getRateLimitReason(decision: ArcjetDecision): ArcjetRateLimitReason | null {
   if (decision.reason.isRateLimit()) {
@@ -127,7 +132,7 @@ async function failDeferredDocument(documentId: string, message: string) {
 }
 
 /**
- * Processes a deferred upload job.
+ * Processes a deferred upload job and drains the pending queue.
  * @param input - Deferred upload metadata and extraction callback
  * @returns Promise that resolves when processing completes
  */
@@ -159,17 +164,61 @@ async function runDeferredUpload(input: DeferredUploadJob) {
       error,
     });
     await failDeferredDocument(input.documentId, 'An unexpected error occurred during processing.');
+  } finally {
+    activeJobs--;
+    logger.info('Deferred job completed', {
+      activeJobs,
+      pendingJobs: pendingJobs.length,
+    });
+
+    const next = pendingJobs.shift();
+    if (next) {
+      startDeferredJob(next);
+    }
   }
 }
 
 /**
- * Schedules deferred upload processing on the event loop.
+ * Starts a deferred job immediately, incrementing the active count.
  * @param input - Deferred upload job payload
  */
-function queueDeferredUpload(input: DeferredUploadJob) {
+function startDeferredJob(input: DeferredUploadJob) {
+  activeJobs++;
+  logger.info('Deferred job started', {
+    documentId: input.documentId,
+    contentType: input.contentType,
+    activeJobs,
+    pendingJobs: pendingJobs.length,
+  });
+
   setTimeout(() => {
     void runDeferredUpload(input);
   }, 0);
+}
+
+/**
+ * Queues a deferred upload job with bounded concurrency.
+ * @param input - Deferred upload job payload
+ */
+function queueDeferredUpload(input: DeferredUploadJob) {
+  if (activeJobs < MAX_CONCURRENT_DEFERRED_JOBS) {
+    startDeferredJob(input);
+    return;
+  }
+
+  pendingJobs.push(input);
+  logger.info('Deferred job queued', {
+    documentId: input.documentId,
+    activeJobs,
+    pendingJobs: pendingJobs.length,
+  });
+
+  if (pendingJobs.length >= QUEUE_WARNING_THRESHOLD) {
+    logger.warn('Deferred job queue growing large', {
+      pendingJobs: pendingJobs.length,
+      activeJobs,
+    });
+  }
 }
 
 /**
