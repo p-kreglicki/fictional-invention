@@ -9,6 +9,8 @@ export const Env = createEnv({
     DATABASE_URL: z.string().min(1),
     PINECONE_API_KEY: z.string().min(1).optional(),
     MISTRAL_API_KEY: z.string().min(1).optional(),
+    UPLOAD_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().optional(),
+    UPLOAD_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().optional(),
     USE_PGLITE: z.string().optional(),
   },
   client: {
@@ -31,6 +33,8 @@ export const Env = createEnv({
     DATABASE_URL: process.env.DATABASE_URL,
     PINECONE_API_KEY: process.env.PINECONE_API_KEY,
     MISTRAL_API_KEY: process.env.MISTRAL_API_KEY,
+    UPLOAD_RATE_LIMIT_MAX_REQUESTS: process.env.UPLOAD_RATE_LIMIT_MAX_REQUESTS,
+    UPLOAD_RATE_LIMIT_WINDOW_SECONDS: process.env.UPLOAD_RATE_LIMIT_WINDOW_SECONDS,
     USE_PGLITE: process.env.USE_PGLITE,
     NEXT_PUBLIC_LOGGING_LEVEL: process.env.NEXT_PUBLIC_LOGGING_LEVEL,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

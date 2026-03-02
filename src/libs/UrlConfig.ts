@@ -9,6 +9,9 @@ export const URL_MAX_CONTENT_BYTES = 5 * 1024 * 1024;
 /** Fetch timeout in milliseconds (10 seconds) */
 export const URL_FETCH_TIMEOUT_MS = 10_000;
 
+/** Maximum concurrent URL fetch operations */
+export const URL_MAX_CONCURRENT_FETCHES = 5;
+
 /** Minimum text length to consider extraction successful */
 export const URL_MIN_TEXT_LENGTH = 50;
 

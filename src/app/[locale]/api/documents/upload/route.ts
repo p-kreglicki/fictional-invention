@@ -1,14 +1,18 @@
-import { Buffer } from 'node:buffer';
+import type { ArcjetDecision, ArcjetRateLimitReason } from '@arcjet/next';
 
+import { Buffer } from 'node:buffer';
+import { fixedWindow } from '@arcjet/next';
 import { NextResponse } from 'next/server';
 import * as z from 'zod';
 
-import { requireUser } from '@/libs/Auth';
+import arcjet from '@/libs/Arcjet';
+import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import {
   ingestContent,
   markDocumentAsFailed,
   reserveDocumentSlot,
 } from '@/libs/ContentIngestion';
+import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
 import { processPdf } from '@/libs/PdfExtractor';
 import { sanitizeText } from '@/libs/Sanitizer';
@@ -16,6 +20,40 @@ import { extractUrlContent } from '@/libs/UrlExtractor';
 import { DocumentUploadSchema } from '@/validations/DocumentValidation';
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
+const UPLOAD_RATE_LIMIT_MAX_REQUESTS = Env.UPLOAD_RATE_LIMIT_MAX_REQUESTS ?? 10;
+const UPLOAD_RATE_LIMIT_WINDOW_SECONDS = Env.UPLOAD_RATE_LIMIT_WINDOW_SECONDS ?? 60;
+
+const uploadRateLimiter = arcjet.withRule(
+  fixedWindow({
+    mode: 'LIVE',
+    max: UPLOAD_RATE_LIMIT_MAX_REQUESTS,
+    window: `${UPLOAD_RATE_LIMIT_WINDOW_SECONDS}s`,
+    characteristics: ['userId'],
+  }),
+);
+
+function getRateLimitReason(decision: ArcjetDecision): ArcjetRateLimitReason | null {
+  if (decision.reason.isRateLimit()) {
+    return decision.reason;
+  }
+
+  for (const result of decision.results) {
+    if (result.reason.isRateLimit()) {
+      return result.reason;
+    }
+  }
+
+  return null;
+}
+
+function setRateLimitHeaders(
+  response: NextResponse,
+  rateLimitReason: ArcjetRateLimitReason,
+) {
+  response.headers.set('X-RateLimit-Limit', String(rateLimitReason.max));
+  response.headers.set('X-RateLimit-Remaining', String(rateLimitReason.remaining));
+  response.headers.set('X-RateLimit-Reset', String(rateLimitReason.reset));
+}
 
 /**
  * POST /api/documents/upload
@@ -26,33 +64,63 @@ export async function POST(request: Request) {
   try {
     // Authenticate user
     const user = await requireUser();
+    let rateLimitReason: ArcjetRateLimitReason | null = null;
+
+    if (Env.ARCJET_KEY) {
+      const decision = await uploadRateLimiter.protect(request, { userId: user.id });
+      rateLimitReason = getRateLimitReason(decision);
+
+      if (decision.isDenied()) {
+        if (rateLimitReason) {
+          const response = NextResponse.json(
+            { error: 'RATE_LIMIT_EXCEEDED', message: 'Too many upload requests' },
+            { status: 429 },
+          );
+          response.headers.set('Retry-After', String(rateLimitReason.reset));
+          setRateLimitHeaders(response, rateLimitReason);
+          return response;
+        }
+
+        return NextResponse.json(
+          { error: 'FORBIDDEN', message: 'Request blocked by security policy' },
+          { status: 403 },
+        );
+      }
+    }
 
     // Determine content type
     const contentType = request.headers.get('content-type') || '';
+    let response: NextResponse;
 
     if (contentType.includes('multipart/form-data')) {
       // PDF upload via FormData
-      return handlePdfUpload(request, user.id);
+      response = await handlePdfUpload(request, user.id);
     } else if (contentType.includes('application/json')) {
       // URL or text upload via JSON
-      return handleJsonUpload(request, user.id);
+      response = await handleJsonUpload(request, user.id);
     } else {
-      return NextResponse.json(
+      response = NextResponse.json(
         { error: 'INVALID_CONTENT_TYPE', message: 'Use multipart/form-data for PDF or application/json for URL/text' },
         { status: 415 },
       );
     }
+
+    if (rateLimitReason) {
+      setRateLimitHeaders(response, rateLimitReason);
+    }
+
+    return response;
   } catch (error) {
     logger.error('Upload failed', { error });
 
-    if (error instanceof Error && error.message.includes('Authentication')) {
+    if (error instanceof AuthenticationError) {
       return NextResponse.json(
         { error: 'UNAUTHORIZED', message: 'Authentication required' },
         { status: 401 },
       );
     }
 
-    if (error instanceof Error && error.message.includes('User not found')) {
+    if (error instanceof UserNotFoundError) {
       return NextResponse.json(
         { error: 'USER_NOT_FOUND', message: 'User account not synced. Please try again.' },
         { status: 403 },
@@ -140,7 +208,7 @@ async function handlePdfUpload(request: Request, userId: string) {
     userId,
     title: documentTitle,
     contentType: 'pdf',
-    text: extraction.text!,
+    text: extraction.text,
     originalFilename: file.name,
   });
 
@@ -239,7 +307,7 @@ async function handleUrlUpload(
     userId,
     title: documentTitle.slice(0, 200),
     contentType: 'url',
-    text: extraction.text!,
+    text: extraction.text,
     sourceUrl: data.url,
   });
 

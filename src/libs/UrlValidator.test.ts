@@ -151,6 +151,34 @@ describe('validateUrl', () => {
     expect(result.error).toBeUndefined();
   });
 
+  it('rejects octal loopback notation in direct IP URL', async () => {
+    const result = await validateUrl('https://0177.0.0.1/');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL points to blocked IP address');
+  });
+
+  it('rejects decimal loopback notation in direct IP URL', async () => {
+    const result = await validateUrl('https://2130706433/');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL points to blocked IP address');
+  });
+
+  it('rejects hexadecimal loopback notation in direct IP URL', async () => {
+    const result = await validateUrl('https://0x7f.0x0.0x0.0x1/');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL points to blocked IP address');
+  });
+
+  it('rejects mixed octal notation in direct IP URL', async () => {
+    const result = await validateUrl('https://127.0.0.01/');
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL points to blocked IP address');
+  });
+
   it('rejects when DNS resolution fails completely', async () => {
     mockResolve4.mockResolvedValue([]);
     mockResolve6.mockResolvedValue([]);

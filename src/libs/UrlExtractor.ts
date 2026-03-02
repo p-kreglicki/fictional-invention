@@ -12,6 +12,7 @@ import { Agent } from 'undici';
 
 import {
   URL_FETCH_TIMEOUT_MS,
+  URL_MAX_CONCURRENT_FETCHES,
   URL_MAX_CONTENT_BYTES,
   URL_MIN_TEXT_LENGTH,
   URL_USER_AGENT,
@@ -19,13 +20,17 @@ import {
 import { validateUrl } from './UrlValidator';
 
 export type UrlExtractionResult = {
-  success: boolean;
-  text?: string;
+  success: true;
+  text: string;
   title?: string;
   byline?: string;
   siteName?: string;
-  error?: string;
-  errorCode?:
+  error?: undefined;
+  errorCode?: undefined;
+} | {
+  success: false;
+  error: string;
+  errorCode:
     | 'VALIDATION_FAILED'
     | 'FETCH_FAILED'
     | 'TIMEOUT'
@@ -33,17 +38,11 @@ export type UrlExtractionResult = {
     | 'NOT_HTML'
     | 'NO_CONTENT'
     | 'PARSE_FAILED';
+  text?: undefined;
+  title?: undefined;
+  byline?: undefined;
+  siteName?: undefined;
 };
-
-/**
- * Custom error for timeout scenarios.
- */
-class TimeoutError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TimeoutError';
-  }
-}
 
 /**
  * Custom error for content too large.
@@ -54,6 +53,47 @@ class ContentTooLargeError extends Error {
     this.name = 'ContentTooLargeError';
   }
 }
+
+class Semaphore {
+  private available: number;
+  private queue: Array<() => void> = [];
+
+  constructor(capacity: number) {
+    this.available = capacity;
+  }
+
+  private async acquire() {
+    if (this.available > 0) {
+      this.available -= 1;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  private release() {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+      return;
+    }
+
+    this.available += 1;
+  }
+
+  async runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await operation();
+    } finally {
+      this.release();
+    }
+  }
+}
+
+const fetchSemaphore = new Semaphore(URL_MAX_CONCURRENT_FETCHES);
 
 /**
  * Creates a DNS lookup function that only returns pre-validated IPs.
@@ -240,7 +280,7 @@ export async function extractUrlContent(urlString: string): Promise<UrlExtractio
   if (!validation.valid) {
     return {
       success: false,
-      error: validation.error,
+      error: validation.error ?? 'URL validation failed.',
       errorCode: 'VALIDATION_FAILED',
     };
   }
@@ -258,17 +298,10 @@ export async function extractUrlContent(urlString: string): Promise<UrlExtractio
   // Step 2: Fetch content with DNS pinned to validated IPs
   let html: string;
   try {
-    html = await fetchWithLimits(urlString, allowedIps);
+    html = await fetchSemaphore.runExclusive(async () => fetchWithLimits(urlString, allowedIps));
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        return {
-          success: false,
-          error: 'The URL took too long to respond.',
-          errorCode: 'TIMEOUT',
-        };
-      }
-      if (error instanceof TimeoutError) {
         return {
           success: false,
           error: 'The URL took too long to respond.',

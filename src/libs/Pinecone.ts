@@ -1,5 +1,6 @@
 import type { RecordMetadata } from '@pinecone-database/pinecone';
 import { Pinecone } from '@pinecone-database/pinecone';
+import { EMBEDDING_DIMENSION } from './EmbeddingConfig';
 import { Env } from './Env';
 import { logger } from './Logger';
 
@@ -25,7 +26,6 @@ if (Env.NODE_ENV !== 'production' && pinecone) {
 // Constants
 export const PINECONE_INDEX_NAME = 'italian-learning';
 export const PINECONE_NAMESPACE = 'content';
-export const MISTRAL_EMBED_DIMENSION = 1024;
 
 // Metadata type for vectors
 export type ChunkMetadata = {
@@ -63,7 +63,7 @@ export async function ensureIndexExists(): Promise<void> {
     logger.info('Creating Pinecone index', { name: PINECONE_INDEX_NAME });
     await pinecone.createIndex({
       name: PINECONE_INDEX_NAME,
-      dimension: MISTRAL_EMBED_DIMENSION,
+      dimension: EMBEDDING_DIMENSION,
       metric: 'cosine',
       spec: {
         serverless: {
@@ -81,7 +81,7 @@ export async function ensureIndexExists(): Promise<void> {
 export async function keepAlive(): Promise<void> {
   const index = getIndex();
   await index.query({
-    vector: Array.from({ length: MISTRAL_EMBED_DIMENSION }).fill(0) as number[],
+    vector: Array.from({ length: EMBEDDING_DIMENSION }).fill(0) as number[],
     topK: 1,
   });
   logger.info('Pinecone keep-alive ping sent');

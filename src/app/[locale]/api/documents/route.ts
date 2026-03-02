@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
-import { requireUser } from '@/libs/Auth';
+import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
 import { documentsSchema } from '@/models/Schema';
@@ -49,10 +49,17 @@ export async function GET() {
   } catch (error) {
     logger.error('Failed to list documents', { error });
 
-    if (error instanceof Error && error.message.includes('Authentication')) {
+    if (error instanceof AuthenticationError) {
       return NextResponse.json(
         { error: 'UNAUTHORIZED', message: 'Authentication required' },
         { status: 401 },
+      );
+    }
+
+    if (error instanceof UserNotFoundError) {
+      return NextResponse.json(
+        { error: 'USER_NOT_FOUND', message: 'User account not synced. Please try again.' },
+        { status: 403 },
       );
     }
 
