@@ -203,6 +203,8 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
+    } else {
+      logger.warn('Upload rate limiting disabled - ARCJET_KEY not configured');
     }
 
     // Determine content type
