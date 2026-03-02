@@ -15,6 +15,7 @@ describe('documents list response format', () => {
       'title',
       'contentType',
       'status',
+      'searchable',
       'chunkCount',
       'errorMessage',
       'sourceUrl',
@@ -26,6 +27,7 @@ describe('documents list response format', () => {
     expect(expectedFields).toContain('id');
     expect(expectedFields).toContain('title');
     expect(expectedFields).toContain('status');
+    expect(expectedFields).toContain('searchable');
     expect(expectedFields).toContain('chunkCount');
     expect(expectedFields).toContain('createdAt');
   });

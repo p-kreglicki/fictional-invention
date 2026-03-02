@@ -47,6 +47,7 @@ export async function GET(_request: Request, props: RouteParams) {
       title: document.title,
       contentType: document.contentType,
       status: document.status,
+      searchable: document.status === 'ready',
       chunkCount: document.chunkCount,
       errorMessage: document.errorMessage,
       sourceUrl: document.sourceUrl,

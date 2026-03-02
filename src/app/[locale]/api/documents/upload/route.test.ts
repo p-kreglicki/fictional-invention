@@ -71,6 +71,8 @@ describe('POST /api/documents/upload', () => {
       success: true,
       documentId: input.documentId,
       chunkCount: 1,
+      status: 'ready',
+      searchable: true,
     }));
 
     const { POST } = await import('./route');
@@ -81,8 +83,13 @@ describe('POST /api/documents/upload', () => {
     ]);
 
     const statuses = [firstResponse.status, secondResponse.status].sort((a, b) => a - b);
+    const firstBody = await firstResponse.json();
+    const secondBody = await secondResponse.json();
+    const successBody = firstResponse.status === 201 ? firstBody : secondBody;
 
     expect(statuses).toEqual([201, 429]);
     expect(mockIngestContent).toHaveBeenCalledTimes(1);
+    expect(successBody.status).toBe('ready');
+    expect(successBody.searchable).toBe(true);
   });
 });
