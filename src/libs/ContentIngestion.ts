@@ -213,6 +213,7 @@ export async function ingestContent(
   const documentId = input.documentId;
 
   try {
+    await updateDocumentStatus(documentId, 'processing');
     onProgress?.('chunking', 'Splitting text into chunks');
 
     // Step 1: Chunk the text

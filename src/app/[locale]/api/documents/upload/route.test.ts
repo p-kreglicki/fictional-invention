@@ -82,6 +82,7 @@ describe('POST /api/documents/upload', () => {
   });
 
   it('returns one success and one quota error under concurrent near-quota requests', async () => {
+    vi.useFakeTimers();
     let currentCount = 49;
 
     mockReserveDocumentSlot.mockImplementation(async () => {
@@ -109,20 +110,28 @@ describe('POST /api/documents/upload', () => {
 
     const { POST } = await import('./route');
 
-    const [firstResponse, secondResponse] = await Promise.all([
-      POST(createTextUploadRequest()),
-      POST(createTextUploadRequest()),
-    ]);
+    try {
+      const [firstResponse, secondResponse] = await Promise.all([
+        POST(createTextUploadRequest()),
+        POST(createTextUploadRequest()),
+      ]);
 
-    const statuses = [firstResponse.status, secondResponse.status].sort((a, b) => a - b);
-    const firstBody = await firstResponse.json();
-    const secondBody = await secondResponse.json();
-    const successBody = firstResponse.status === 201 ? firstBody : secondBody;
+      const statuses = [firstResponse.status, secondResponse.status].sort((a, b) => a - b);
+      const firstBody = await firstResponse.json();
+      const secondBody = await secondResponse.json();
+      const successBody = firstResponse.status === 202 ? firstBody : secondBody;
 
-    expect(statuses).toEqual([201, 429]);
-    expect(mockIngestContent).toHaveBeenCalledTimes(1);
-    expect(successBody.status).toBe('ready');
-    expect(successBody.searchable).toBe(true);
+      expect(statuses).toEqual([202, 429]);
+      expect(successBody.status).toBe('uploading');
+      expect(successBody.searchable).toBe(false);
+      expect(mockIngestContent).not.toHaveBeenCalled();
+
+      await vi.runAllTimersAsync();
+
+      expect(mockIngestContent).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('returns 429 with rate limit headers when upload limiter denies request', async () => {
