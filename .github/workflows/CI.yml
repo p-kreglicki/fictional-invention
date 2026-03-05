@@ -171,6 +171,7 @@ jobs:
           sudo chmod -R 777 test-results
 
       - name: Run visual regression tests
+        if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
         uses: chromaui/action@v13
         with:
           playwright: true
