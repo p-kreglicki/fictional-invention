@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRequireUser = vi.fn(async () => ({ id: 'user-1' }));
 const mockEnqueueExerciseGeneration = vi.fn();
+const mockKickGenerationWorker = vi.fn();
 const mockProtect = vi.fn();
 const mockWithRule = vi.fn(() => ({
   protect: mockProtect,
@@ -14,6 +15,7 @@ vi.mock('@/libs/Auth', () => ({
 
 vi.mock('@/libs/ExerciseGeneration', () => ({
   enqueueExerciseGeneration: mockEnqueueExerciseGeneration,
+  kickGenerationWorker: mockKickGenerationWorker,
 }));
 
 vi.mock('@arcjet/next', () => ({
@@ -78,6 +80,7 @@ describe('POST /api/exercises/generate', () => {
     expect(response.status).toBe(202);
     expect(body.jobId).toBe('job-1');
     expect(body.status).toBe('pending');
+    expect(mockKickGenerationWorker).toHaveBeenCalledWith('user-1');
   });
 
   it('returns 404 when documents are missing', async () => {

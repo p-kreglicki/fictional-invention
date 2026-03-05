@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import arcjet from '@/libs/Arcjet';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { Env } from '@/libs/Env';
-import { enqueueExerciseGeneration } from '@/libs/ExerciseGeneration';
+import { enqueueExerciseGeneration, kickGenerationWorker } from '@/libs/ExerciseGeneration';
 import { logger } from '@/libs/Logger';
 
 export const runtime = 'nodejs';
@@ -106,6 +106,8 @@ export async function POST(request: Request) {
     if (rateLimitReason) {
       setRateLimitHeaders(response, rateLimitReason);
     }
+
+    kickGenerationWorker(user.id);
 
     return response;
   } catch (error) {

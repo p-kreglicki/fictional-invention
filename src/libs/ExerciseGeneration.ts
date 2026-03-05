@@ -1,5 +1,5 @@
 import type { GeneratedExercise } from '@/validations/ExerciseValidation';
-import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
@@ -12,7 +12,6 @@ import {
   generationJobsSchema,
 } from '@/models/Schema';
 import {
-
   GeneratedExercisesResponseSchema,
   GenerateExercisesRequestSchema,
 } from '@/validations/ExerciseValidation';
@@ -21,7 +20,10 @@ import { buildExerciseSystemPrompt, buildExerciseUserPrompt } from './ExercisePr
 const RETRIEVAL_TOP_K = 30;
 const EXCERPT_SUBSET_SIZE = 3;
 const MAX_GENERATION_ATTEMPTS = 3;
-const STALE_JOB_THRESHOLD_MS = 10 * 60 * 1000;
+const DEFAULT_WORKER_BATCH_SIZE = 10;
+const MAX_WORKER_BATCH_SIZE = 100;
+const PENDING_STALE_JOB_THRESHOLD_MS = Env.GENERATION_PENDING_STALE_MS ?? 10 * 60 * 1000;
+const PROCESSING_STALE_JOB_THRESHOLD_MS = Env.GENERATION_PROCESSING_STALE_MS ?? 20 * 60 * 1000;
 const CHAT_REQUEST_DELAY_MS = Env.MISTRAL_CHAT_REQUEST_DELAY_MS ?? 0;
 
 type GenerationCandidate = {
@@ -51,6 +53,54 @@ type EnqueueGenerationInput = {
   userId: string;
   request: unknown;
 };
+
+type ClaimedGenerationJob = {
+  id: string;
+  userId: string;
+  exerciseType: 'multiple_choice' | 'fill_gap' | 'single_answer';
+  documentIds: string[];
+  requestedCount: number;
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | null;
+  topicFocus: string | null;
+};
+
+type GenerationWorkerBatchResult = {
+  claimed: number;
+  completed: number;
+  failed: number;
+};
+
+const globalForGenerationWorker = globalThis as unknown as {
+  exerciseGenerationWorker: Promise<unknown> | null | undefined;
+};
+
+/**
+ * Evaluates whether a pending generation job is stale.
+ * @param createdAt - Job creation timestamp.
+ * @param now - Current timestamp used for cutoff evaluation.
+ * @returns True when the job exceeds the pending stale threshold.
+ */
+export function isPendingGenerationJobStale(createdAt: Date, now = new Date()) {
+  return createdAt.getTime() < now.getTime() - PENDING_STALE_JOB_THRESHOLD_MS;
+}
+
+/**
+ * Evaluates whether a processing generation job is stale.
+ * @param input - Processing timestamps and evaluation time.
+ * @param input.createdAt - Job creation timestamp.
+ * @param input.startedAt - Processing start timestamp, if present.
+ * @param input.now - Current timestamp used for cutoff evaluation.
+ * @returns True when the processing baseline exceeds the processing stale threshold.
+ */
+export function isProcessingGenerationJobStale(input: {
+  createdAt: Date;
+  startedAt: Date | null;
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const baseline = input.startedAt ?? input.createdAt;
+  return baseline.getTime() < now.getTime() - PROCESSING_STALE_JOB_THRESHOLD_MS;
+}
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -280,24 +330,53 @@ async function generateSingleExerciseWithFallback(input: {
   }
 }
 
-async function runGenerationJob(jobId: string) {
-  const job = await db.query.generationJobsSchema.findFirst({
-    where: eq(generationJobsSchema.id, jobId),
+async function claimNextGenerationJob() {
+  const now = new Date();
+
+  return db.transaction(async (tx) => {
+    const lockResult = await tx.execute(
+      sql`SELECT ${generationJobsSchema.id} FROM ${generationJobsSchema} WHERE ${generationJobsSchema.status} = 'pending' ORDER BY ${generationJobsSchema.createdAt} ASC FOR UPDATE SKIP LOCKED LIMIT 1`,
+    );
+
+    const nextRow = lockResult.rows[0] as { id?: unknown } | undefined;
+    const nextId = typeof nextRow?.id === 'string' ? nextRow.id : null;
+    if (!nextId) {
+      return null;
+    }
+
+    const [job] = await tx
+      .update(generationJobsSchema)
+      .set({
+        status: 'processing',
+        startedAt: now,
+        errorMessage: null,
+      })
+      .where(and(
+        eq(generationJobsSchema.id, nextId),
+        eq(generationJobsSchema.status, 'pending'),
+      ))
+      .returning({
+        id: generationJobsSchema.id,
+        userId: generationJobsSchema.userId,
+        exerciseType: generationJobsSchema.exerciseType,
+        documentIds: generationJobsSchema.documentIds,
+        requestedCount: generationJobsSchema.requestedCount,
+        difficulty: generationJobsSchema.difficulty,
+        topicFocus: generationJobsSchema.topicFocus,
+      });
+
+    if (!job) {
+      return null;
+    }
+
+    return {
+      ...job,
+      documentIds: [...job.documentIds],
+    } as ClaimedGenerationJob;
   });
+}
 
-  if (!job) {
-    return;
-  }
-
-  await db
-    .update(generationJobsSchema)
-    .set({
-      status: 'processing',
-      startedAt: new Date(),
-      errorMessage: null,
-    })
-    .where(eq(generationJobsSchema.id, job.id));
-
+async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
   logger.info('generation_job_started', {
     jobId: job.id,
     userId: job.userId,
@@ -323,7 +402,7 @@ async function runGenerationJob(jobId: string) {
 
   if (candidates.length === 0) {
     await failGenerationJob(job.id, 'NO_CONTENT', 'No searchable document chunks found');
-    return;
+    return 'failed' as const;
   }
 
   const systemPrompt = buildExerciseSystemPrompt();
@@ -444,18 +523,8 @@ async function runGenerationJob(jobId: string) {
     generatedCount,
     failedCount,
   });
-}
 
-function queueGenerationJob(jobId: string) {
-  setTimeout(() => {
-    void runGenerationJob(jobId).catch((error) => {
-      logger.error('generation_job_worker_crashed', {
-        jobId,
-        error,
-      });
-      void failGenerationJob(jobId, 'GENERATION_FAILED', 'Unexpected worker failure');
-    });
-  }, 0);
+  return status;
 }
 
 /**
@@ -464,30 +533,156 @@ function queueGenerationJob(jobId: string) {
  * @returns Number of jobs updated.
  */
 async function recoverStaleGenerationJobs(userId?: string) {
-  const staleBefore = new Date(Date.now() - STALE_JOB_THRESHOLD_MS);
-  const baseCondition = and(
-    or(
-      eq(generationJobsSchema.status, 'pending'),
-      eq(generationJobsSchema.status, 'processing'),
-    ),
-    lt(generationJobsSchema.createdAt, staleBefore),
+  const now = new Date();
+  const stalePendingBefore = new Date(now.getTime() - PENDING_STALE_JOB_THRESHOLD_MS);
+  const staleProcessingBefore = new Date(now.getTime() - PROCESSING_STALE_JOB_THRESHOLD_MS);
+
+  const stalePendingBaseCondition = and(
+    eq(generationJobsSchema.status, 'pending'),
+    lt(generationJobsSchema.createdAt, stalePendingBefore),
   );
 
-  const whereCondition = userId
-    ? and(baseCondition, eq(generationJobsSchema.userId, userId))
-    : baseCondition;
+  const staleProcessingBaseCondition = and(
+    eq(generationJobsSchema.status, 'processing'),
+    or(
+      and(isNotNull(generationJobsSchema.startedAt), lt(generationJobsSchema.startedAt, staleProcessingBefore)),
+      and(isNull(generationJobsSchema.startedAt), lt(generationJobsSchema.createdAt, staleProcessingBefore)),
+    ),
+  );
 
-  const result = await db
-    .update(generationJobsSchema)
-    .set({
-      status: 'failed',
-      errorMessage: 'WORKER_INTERRUPTED',
-      completedAt: new Date(),
+  const stalePendingCondition = userId
+    ? and(stalePendingBaseCondition, eq(generationJobsSchema.userId, userId))
+    : stalePendingBaseCondition;
+
+  const staleProcessingCondition = userId
+    ? and(staleProcessingBaseCondition, eq(generationJobsSchema.userId, userId))
+    : staleProcessingBaseCondition;
+
+  const [pendingResult, processingResult] = await Promise.all([
+    db
+      .update(generationJobsSchema)
+      .set({
+        status: 'failed',
+        errorMessage: 'WORKER_INTERRUPTED',
+        completedAt: now,
+      })
+      .where(stalePendingCondition)
+      .returning({ id: generationJobsSchema.id }),
+    db
+      .update(generationJobsSchema)
+      .set({
+        status: 'failed',
+        errorMessage: 'WORKER_INTERRUPTED',
+        completedAt: now,
+      })
+      .where(staleProcessingCondition)
+      .returning({ id: generationJobsSchema.id }),
+  ]);
+
+  return pendingResult.length + processingResult.length;
+}
+
+function normalizeBatchSize(maxJobs: number | undefined) {
+  const value = maxJobs ?? DEFAULT_WORKER_BATCH_SIZE;
+  return Math.max(1, Math.min(MAX_WORKER_BATCH_SIZE, value));
+}
+
+/**
+ * Processes pending generation jobs in a bounded worker batch.
+ * @param input - Batch options for maximum claimed jobs and optional user-scoped stale recovery.
+ * @param input.maxJobs - Maximum number of jobs to claim in this run.
+ * @param input.userId - Optional user scope for stale recovery.
+ * @returns Worker batch counters.
+ */
+export async function runGenerationWorkerBatch(input?: {
+  maxJobs?: number;
+  userId?: string;
+}): Promise<GenerationWorkerBatchResult> {
+  const maxJobs = normalizeBatchSize(input?.maxJobs);
+  await recoverStaleGenerationJobs(input?.userId);
+
+  let claimed = 0;
+  let completed = 0;
+  let failed = 0;
+
+  for (let index = 0; index < maxJobs; index += 1) {
+    const job = await claimNextGenerationJob();
+    if (!job) {
+      break;
+    }
+
+    claimed += 1;
+
+    try {
+      const status = await runClaimedGenerationJob(job);
+      if (status === 'completed') {
+        completed += 1;
+      } else {
+        failed += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      logger.error('generation_job_worker_crashed', {
+        jobId: job.id,
+        error,
+      });
+      await failGenerationJob(job.id, 'GENERATION_FAILED', 'Unexpected worker failure');
+    }
+  }
+
+  logger.info('generation_worker_batch_completed', {
+    maxJobs,
+    claimed,
+    completed,
+    failed,
+  });
+
+  return {
+    claimed,
+    completed,
+    failed,
+  };
+}
+
+/**
+ * Counts currently pending generation jobs.
+ * @returns Number of pending jobs.
+ */
+export async function countPendingGenerationJobs() {
+  const [result] = await db
+    .select({ value: count() })
+    .from(generationJobsSchema)
+    .where(eq(generationJobsSchema.status, 'pending'));
+
+  return result?.value ?? 0;
+}
+
+function triggerLocalGenerationWorker(input: { userId?: string }) {
+  if (globalForGenerationWorker.exerciseGenerationWorker) {
+    return;
+  }
+
+  globalForGenerationWorker.exerciseGenerationWorker = runGenerationWorkerBatch({
+    maxJobs: DEFAULT_WORKER_BATCH_SIZE,
+    userId: input.userId,
+  })
+    .catch((error) => {
+      logger.error('generation_worker_batch_failed', {
+        error,
+        userId: input.userId,
+      });
     })
-    .where(whereCondition)
-    .returning({ id: generationJobsSchema.id });
+    .finally(() => {
+      globalForGenerationWorker.exerciseGenerationWorker = null;
+    });
+}
 
-  return result.length;
+/**
+ * Triggers non-blocking local worker processing when a new job is enqueued.
+ * @param userId - Optional user scope for stale recovery prior to claiming work.
+ */
+export function kickGenerationWorker(userId?: string) {
+  triggerLocalGenerationWorker({ userId });
 }
 
 /**
@@ -552,8 +747,6 @@ export async function enqueueExerciseGeneration(input: EnqueueGenerationInput): 
     requestedCount: parsedRequest.data.count,
     exerciseType: parsedRequest.data.exerciseType,
   });
-
-  queueGenerationJob(job.id);
 
   return {
     success: true,

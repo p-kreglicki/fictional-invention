@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { getGenerationJobWithExercises } from '@/libs/ExerciseGeneration';
 import { logger } from '@/libs/Logger';
@@ -9,10 +10,19 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
+const JobIdSchema = z.uuid();
+
 export async function GET(_request: Request, props: RouteParams) {
   try {
     const user = await requireUser();
     const { id } = await props.params;
+    if (!JobIdSchema.safeParse(id).success) {
+      return NextResponse.json(
+        { error: 'JOB_NOT_FOUND', message: 'Generation job not found' },
+        { status: 404 },
+      );
+    }
+
     const result = await getGenerationJobWithExercises(id, user.id);
 
     if (!result) {

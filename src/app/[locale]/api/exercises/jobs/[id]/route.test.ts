@@ -38,10 +38,22 @@ describe('GET /api/exercises/jobs/[id]', () => {
     expect(body.error).toBe('JOB_NOT_FOUND');
   });
 
+  it('returns 404 for malformed job IDs', async () => {
+    const { GET } = await import('./route');
+    const response = await GET(new Request('http://localhost'), {
+      params: Promise.resolve({ id: 'not-a-uuid' }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body.error).toBe('JOB_NOT_FOUND');
+    expect(mockGetGenerationJobWithExercises).not.toHaveBeenCalled();
+  });
+
   it('returns job status and exercises', async () => {
     mockGetGenerationJobWithExercises.mockResolvedValue({
       job: {
-        id: 'job-1',
+        id: '550e8400-e29b-41d4-a716-446655440002',
         status: 'completed',
         requestedCount: 2,
         generatedCount: 2,
@@ -68,12 +80,12 @@ describe('GET /api/exercises/jobs/[id]', () => {
 
     const { GET } = await import('./route');
     const response = await GET(new Request('http://localhost'), {
-      params: Promise.resolve({ id: 'job-1' }),
+      params: Promise.resolve({ id: '550e8400-e29b-41d4-a716-446655440002' }),
     });
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.id).toBe('job-1');
+    expect(body.id).toBe('550e8400-e29b-41d4-a716-446655440002');
     expect(body.status).toBe('completed');
     expect(body.exercises).toHaveLength(1);
   });
