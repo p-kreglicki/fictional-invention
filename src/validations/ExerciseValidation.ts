@@ -5,6 +5,28 @@ const difficultyValues = ['beginner', 'intermediate', 'advanced'] as const;
 
 const ExerciseTypeSchema = z.enum(exerciseTypeValues);
 const DifficultySchema = z.enum(difficultyValues);
+const SourceReferenceSchema = z.object({
+  documentId: z.uuid(),
+  chunkPosition: z.number().int().min(0),
+});
+
+const SourceReferencesSchema = z.array(SourceReferenceSchema).min(1).max(3).superRefine((value, context) => {
+  const seen = new Set<string>();
+
+  for (const reference of value) {
+    const key = `${reference.documentId}:${reference.chunkPosition}`;
+    if (seen.has(key)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'sourceReferences must contain unique documentId/chunkPosition pairs',
+        path: ['sourceReferences'],
+      });
+      return;
+    }
+
+    seen.add(key);
+  }
+});
 
 export const GenerateExercisesRequestSchema = z.object({
   documentIds: z.array(z.uuid()).min(1).max(10),
@@ -25,7 +47,7 @@ export const GenerateExercisesRequestSchema = z.object({
 const BaseGeneratedExerciseSchema = z.object({
   type: ExerciseTypeSchema,
   question: z.string().min(1).max(1000),
-  sourceChunkPositions: z.array(z.number().int().min(0)).min(1).max(3),
+  sourceReferences: SourceReferencesSchema,
 });
 
 const GeneratedMultipleChoiceExerciseSchema = BaseGeneratedExerciseSchema.extend({

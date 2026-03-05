@@ -31,6 +31,8 @@ describe('buildExerciseUserPrompt', () => {
     expect(prompt).toContain('Exercise type: fill_gap');
     expect(prompt).toContain('### EXCERPT_1');
     expect(prompt).toContain('chunk_position: 3');
+    expect(prompt).toContain('sourceReferences');
+    expect(prompt).toContain('{ documentId, chunkPosition }');
     expect(prompt).toContain('Correct the issues from previous invalid output');
   });
 });

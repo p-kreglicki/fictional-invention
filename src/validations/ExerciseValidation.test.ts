@@ -35,7 +35,16 @@ describe('GeneratedExercisesResponseSchema', () => {
       exercises: [{
         type: 'multiple_choice',
         question: 'Quale frase è corretta?',
-        sourceChunkPositions: [0, 1],
+        sourceReferences: [
+          {
+            documentId: '550e8400-e29b-41d4-a716-446655440000',
+            chunkPosition: 0,
+          },
+          {
+            documentId: '550e8400-e29b-41d4-a716-446655440001',
+            chunkPosition: 1,
+          },
+        ],
         exerciseData: {
           options: ['Io andato', 'Io sono andato', 'Io andavo', 'Io andando'],
           correctIndex: 1,
@@ -51,9 +60,37 @@ describe('GeneratedExercisesResponseSchema', () => {
       exercises: [{
         type: 'fill_gap',
         question: 'Ieri sono andato al mercato.',
-        sourceChunkPositions: [2],
+        sourceReferences: [{
+          documentId: '550e8400-e29b-41d4-a716-446655440000',
+          chunkPosition: 2,
+        }],
         exerciseData: {
           answer: 'ieri',
+        },
+      }],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects duplicate source references', () => {
+    const result = GeneratedExercisesResponseSchema.safeParse({
+      exercises: [{
+        type: 'single_answer',
+        question: 'Spiega la differenza tra passato prossimo e imperfetto',
+        sourceReferences: [
+          {
+            documentId: '550e8400-e29b-41d4-a716-446655440000',
+            chunkPosition: 0,
+          },
+          {
+            documentId: '550e8400-e29b-41d4-a716-446655440000',
+            chunkPosition: 0,
+          },
+        ],
+        exerciseData: {
+          sampleAnswer: 'Dipende dalla durata e completezza dell azione.',
+          gradingCriteria: ['spiega uso', 'fornisce esempio'],
         },
       }],
     });

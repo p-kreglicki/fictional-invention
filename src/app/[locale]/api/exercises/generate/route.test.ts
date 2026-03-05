@@ -110,6 +110,26 @@ describe('POST /api/exercises/generate', () => {
     expect(body.error).toBe('DOCUMENTS_NOT_FOUND');
   });
 
+  it('returns 500 for internal enqueue failures', async () => {
+    mockEnqueueExerciseGeneration.mockResolvedValue({
+      success: false,
+      errorCode: 'GENERATION_FAILED',
+      error: 'Failed to enqueue generation job',
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(createRequest({
+      documentIds: ['550e8400-e29b-41d4-a716-446655440000'],
+      exerciseType: 'multiple_choice',
+      count: 2,
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe('GENERATION_FAILED');
+    expect(mockKickGenerationWorker).not.toHaveBeenCalled();
+  });
+
   it('returns 429 with headers when limiter blocks request', async () => {
     mockProtect.mockResolvedValue({
       isDenied: () => true,

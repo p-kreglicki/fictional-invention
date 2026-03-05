@@ -60,7 +60,7 @@ export function buildExerciseUserPrompt(input: BuildExerciseUserPromptInput) {
     exerciseTypeRules[input.request.exerciseType],
     optionalHints,
     'Return JSON object with key "exercises" containing exactly one exercise.',
-    'For sourceChunkPositions, only use positions from the excerpts provided.',
+    'For sourceReferences, use an array of { documentId, chunkPosition } values from the excerpts provided.',
     'Material excerpts:',
     chunks,
   ].filter(Boolean).join('\n\n');

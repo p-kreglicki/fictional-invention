@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isPendingGenerationJobStale, isProcessingGenerationJobStale } from './ExerciseGeneration';
+import {
+  isPendingGenerationJobStale,
+  isProcessingGenerationJobStale,
+  resolveGeneratedSourceReferenceCandidates,
+} from './ExerciseGeneration';
 
 describe('Generation job stale thresholds', () => {
   it('marks pending jobs stale based on createdAt', () => {
@@ -43,5 +47,50 @@ describe('Generation job stale thresholds', () => {
       startedAt: null,
       now,
     })).toBe(false);
+  });
+});
+
+describe('resolveGeneratedSourceReferenceCandidates', () => {
+  it('matches references by document and position', () => {
+    const subset = [
+      {
+        documentId: '550e8400-e29b-41d4-a716-446655440000',
+        chunkPosition: 0,
+        content: 'Doc A chunk 0',
+      },
+      {
+        documentId: '550e8400-e29b-41d4-a716-446655440001',
+        chunkPosition: 0,
+        content: 'Doc B chunk 0',
+      },
+    ];
+
+    const resolved = resolveGeneratedSourceReferenceCandidates({
+      subset,
+      sourceReferences: [{
+        documentId: '550e8400-e29b-41d4-a716-446655440001',
+        chunkPosition: 0,
+      }],
+    });
+
+    expect(resolved).toEqual([subset[1]]);
+  });
+
+  it('returns null when a reference is outside the subset', () => {
+    const subset = [{
+      documentId: '550e8400-e29b-41d4-a716-446655440000',
+      chunkPosition: 0,
+      content: 'Doc A chunk 0',
+    }];
+
+    const resolved = resolveGeneratedSourceReferenceCandidates({
+      subset,
+      sourceReferences: [{
+        documentId: '550e8400-e29b-41d4-a716-446655440001',
+        chunkPosition: 0,
+      }],
+    });
+
+    expect(resolved).toBeNull();
   });
 });

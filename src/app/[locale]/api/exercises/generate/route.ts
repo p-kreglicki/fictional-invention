@@ -55,6 +55,22 @@ async function parseJsonBody(request: Request) {
   }
 }
 
+function getEnqueueFailureStatus(errorCode: string) {
+  if (errorCode === 'DOCUMENTS_NOT_FOUND' || errorCode === 'JOB_NOT_FOUND') {
+    return 404;
+  }
+
+  if (
+    errorCode === 'DOCUMENTS_NOT_READY'
+    || errorCode === 'VALIDATION_FAILED'
+    || errorCode === 'NO_CONTENT'
+  ) {
+    return 422;
+  }
+
+  return 500;
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
@@ -104,13 +120,7 @@ export async function POST(request: Request) {
     });
 
     if (!result.success) {
-      const status = result.errorCode === 'DOCUMENTS_NOT_FOUND'
-        ? 404
-        : result.errorCode === 'DOCUMENTS_NOT_READY'
-          ? 422
-          : result.errorCode === 'VALIDATION_FAILED'
-            ? 422
-            : 422;
+      const status = getEnqueueFailureStatus(result.errorCode);
 
       const response = NextResponse.json(
         { error: result.errorCode, message: result.error },

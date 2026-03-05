@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { Env } from '@/libs/Env';
 import { countPendingGenerationJobs, runGenerationWorkerBatch } from '@/libs/ExerciseGeneration';
@@ -33,11 +34,18 @@ function normalizeMaxJobs(value: unknown) {
   return value;
 }
 
+function compareDispatchTokens(providedToken: string, dispatchToken: string) {
+  const providedDigest = createHash('sha256').update(providedToken).digest();
+  const dispatchDigest = createHash('sha256').update(dispatchToken).digest();
+
+  return timingSafeEqual(providedDigest, dispatchDigest);
+}
+
 export async function POST(request: Request) {
   const dispatchToken = Env.GENERATION_DISPATCH_TOKEN;
   const providedToken = extractBearerToken(request);
 
-  if (!dispatchToken || !providedToken || providedToken !== dispatchToken) {
+  if (!dispatchToken || !providedToken || !compareDispatchTokens(providedToken, dispatchToken)) {
     return NextResponse.json(
       { error: 'UNAUTHORIZED', message: 'Authentication required' },
       { status: 401 },

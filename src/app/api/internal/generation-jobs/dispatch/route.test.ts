@@ -44,6 +44,19 @@ describe('POST /api/internal/generation-jobs/dispatch', () => {
     expect(mockRunGenerationWorkerBatch).not.toHaveBeenCalled();
   });
 
+  it('returns 401 with invalid bearer token', async () => {
+    const { POST } = await import('./route');
+    const response = await POST(new Request('http://localhost/api/internal/generation-jobs/dispatch', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer wrong-token',
+      },
+    }));
+
+    expect(response.status).toBe(401);
+    expect(mockRunGenerationWorkerBatch).not.toHaveBeenCalled();
+  });
+
   it('runs a worker batch for authenticated requests', async () => {
     const { POST } = await import('./route');
     const response = await POST(new Request('http://localhost/api/internal/generation-jobs/dispatch', {

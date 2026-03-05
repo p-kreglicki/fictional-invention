@@ -31,6 +31,7 @@ type GenerationCandidate = {
   chunkPosition: number;
   content: string;
 };
+type GeneratedSourceReference = GeneratedExercise['sourceReferences'][number];
 
 type GenerationFailureCode
   = | 'VALIDATION_FAILED'
@@ -124,6 +125,39 @@ function selectCandidateSubset(
     if (candidate) {
       selected.push(candidate);
     }
+  }
+
+  return selected;
+}
+
+function buildSourceReferenceKey(input: { documentId: string; chunkPosition: number }) {
+  return `${input.documentId}:${input.chunkPosition}`;
+}
+
+/**
+ * Resolves generated source references against the current excerpt subset.
+ * @param input - Subset candidates and generated references.
+ * @param input.subset - Candidate excerpts available for the current generation attempt.
+ * @param input.sourceReferences - Model-returned source references to validate and resolve.
+ * @returns Matching candidates, or null when any reference is outside the subset.
+ */
+export function resolveGeneratedSourceReferenceCandidates(input: {
+  subset: GenerationCandidate[];
+  sourceReferences: GeneratedSourceReference[];
+}) {
+  const candidateMap = new Map<string, GenerationCandidate>();
+  for (const candidate of input.subset) {
+    candidateMap.set(buildSourceReferenceKey(candidate), candidate);
+  }
+
+  const selected: GenerationCandidate[] = [];
+  for (const reference of input.sourceReferences) {
+    const candidate = candidateMap.get(buildSourceReferenceKey(reference));
+    if (!candidate) {
+      return null;
+    }
+
+    selected.push(candidate);
   }
 
   return selected;
@@ -286,6 +320,15 @@ async function failGenerationJob(jobId: string, errorCode: GenerationFailureCode
   });
 }
 
+async function incrementGenerationJobFailedCount(jobId: string) {
+  await db
+    .update(generationJobsSchema)
+    .set({
+      failedCount: sql`${generationJobsSchema.failedCount} + 1`,
+    })
+    .where(eq(generationJobsSchema.id, jobId));
+}
+
 async function generateSingleExercise(input: {
   systemPrompt: string;
   userPrompt: string;
@@ -413,6 +456,7 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
   for (let index = 0; index < parsedRequest.count; index += 1) {
     const subset = selectCandidateSubset(candidates, index, EXCERPT_SUBSET_SIZE);
     let generated = null;
+    let generatedCandidates: GenerationCandidate[] | null = null;
 
     for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
       try {
@@ -435,7 +479,16 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
           throw new Error(`Generated type "${result.type}" does not match requested "${parsedRequest.exerciseType}"`);
         }
 
+        const referencedCandidates = resolveGeneratedSourceReferenceCandidates({
+          subset,
+          sourceReferences: result.sourceReferences,
+        });
+        if (!referencedCandidates || referencedCandidates.length === 0) {
+          throw new Error('Generated source references do not match provided excerpts');
+        }
+
         generated = result;
+        generatedCandidates = referencedCandidates;
         break;
       } catch (error) {
         logger.warn('exercise_generation_attempt_failed', {
@@ -456,18 +509,16 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
 
     if (!generated) {
       failedCount += 1;
-      await db
-        .update(generationJobsSchema)
-        .set({
-          failedCount: sql`${generationJobsSchema.failedCount} + 1`,
-        })
-        .where(eq(generationJobsSchema.id, job.id));
+      await incrementGenerationJobFailedCount(job.id);
       continue;
     }
 
-    const chunkIds = await resolveChunkIds(subset.filter((candidate) => {
-      return generated.sourceChunkPositions.includes(candidate.chunkPosition);
-    }));
+    const chunkIds = await resolveChunkIds(generatedCandidates ?? []);
+    if (!generatedCandidates || chunkIds.length !== generatedCandidates.length) {
+      failedCount += 1;
+      await incrementGenerationJobFailedCount(job.id);
+      continue;
+    }
 
     const insertedExerciseId = await insertGeneratedExercise({
       userId: job.userId,
@@ -479,12 +530,7 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
 
     if (!insertedExerciseId) {
       failedCount += 1;
-      await db
-        .update(generationJobsSchema)
-        .set({
-          failedCount: sql`${generationJobsSchema.failedCount} + 1`,
-        })
-        .where(eq(generationJobsSchema.id, job.id));
+      await incrementGenerationJobFailedCount(job.id);
       continue;
     }
 
