@@ -45,9 +45,25 @@ export async function requireUser() {
     throw new AuthenticationError();
   }
 
-  const user = await db.query.usersSchema.findFirst({
+  let user = await db.query.usersSchema.findFirst({
     where: eq(usersSchema.clerkId, userId),
   });
+
+  if (!user) {
+    await db
+      .insert(usersSchema)
+      .values({
+        clerkId: userId,
+      })
+      .onConflictDoNothing({
+        target: usersSchema.clerkId,
+      });
+
+    user = await db.query.usersSchema.findFirst({
+      where: eq(usersSchema.clerkId, userId),
+    });
+  }
+
   if (!user) {
     throw new UserNotFoundError();
   }

@@ -2,7 +2,7 @@
 
 import type { ExerciseCardItem } from './ExerciseCards';
 import type { ExerciseGenerationJobStatus } from './GenerationJobStatus';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPollingGate } from '@/components/exercises/PollingGate';
 import { ExerciseCards } from './ExerciseCards';
@@ -57,7 +57,9 @@ function mergeJobs(current: ExerciseGenerationJobStatus[], incoming: ExerciseGen
 }
 
 export function ExercisesDashboard() {
+  const locale = useLocale();
   const t = useTranslations('DashboardExercisesPage');
+  const apiBasePath = `/${locale}/api`;
   const pollingGateRef = useRef(createPollingGate());
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,8 +74,8 @@ export function ExercisesDashboard() {
     async function bootstrap() {
       try {
         const [documentsResponse, exercisesResponse] = await Promise.all([
-          fetch('/api/documents'),
-          fetch('/api/exercises'),
+          fetch(`${apiBasePath}/documents`),
+          fetch(`${apiBasePath}/exercises`),
         ]);
 
         if (!documentsResponse.ok || !exercisesResponse.ok) {
@@ -110,7 +112,7 @@ export function ExercisesDashboard() {
     return () => {
       active = false;
     };
-  }, [t]);
+  }, [apiBasePath, t]);
 
   const activeJobs = useMemo(() => {
     return jobs.filter(job => job.status === 'pending' || job.status === 'processing');
@@ -130,7 +132,7 @@ export function ExercisesDashboard() {
 
       try {
         const results = await Promise.all(activeJobs.map(async (job) => {
-          const response = await fetch(`/api/exercises/jobs/${job.id}`);
+          const response = await fetch(`${apiBasePath}/exercises/jobs/${job.id}`);
           if (!response.ok) {
             return null;
           }
@@ -186,14 +188,14 @@ export function ExercisesDashboard() {
       active = false;
       window.clearInterval(interval);
     };
-  }, [activeJobs, t]);
+  }, [activeJobs, apiBasePath, t]);
 
   async function handleGenerate(request: GenerateRequest) {
     setIsSubmitting(true);
     setErrorMessage(null);
 
     try {
-      const response = await fetch('/api/exercises/generate', {
+      const response = await fetch(`${apiBasePath}/exercises/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
