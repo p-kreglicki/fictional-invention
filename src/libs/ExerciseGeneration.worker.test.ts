@@ -259,4 +259,19 @@ describe('runGenerationWorkerBatch', () => {
     expect(result.claimed).toBe(2);
     expect(state.jobs.filter(job => job.status === 'pending')).toHaveLength(1);
   });
+
+  it('claims remaining pending jobs in a later batch run', async () => {
+    state.jobs = [
+      createJob({ id: 'job-pending-a', status: 'pending', createdAt: new Date('2026-03-05T17:58:00.000Z') }),
+      createJob({ id: 'job-pending-b', status: 'pending', createdAt: new Date('2026-03-05T17:59:00.000Z') }),
+    ];
+
+    const { runGenerationWorkerBatch } = await import('./ExerciseGeneration');
+    const first = await runGenerationWorkerBatch({ maxJobs: 1 });
+    const second = await runGenerationWorkerBatch({ maxJobs: 1 });
+
+    expect(first.claimed).toBe(1);
+    expect(second.claimed).toBe(1);
+    expect(state.jobs.filter(job => job.status === 'pending')).toHaveLength(0);
+  });
 });

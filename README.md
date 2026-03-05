@@ -65,11 +65,22 @@ MISTRAL_EMBEDDING_BATCH_DELAY_MS=0
 
 # Database (production)
 DATABASE_URL=your_postgres_connection_string
+
+# Background generation dispatch (production)
+CRON_SECRET=your_shared_cron_secret
+
+# Optional manual dispatch token for POST /api/internal/generation-jobs/dispatch
+GENERATION_DISPATCH_TOKEN=your_manual_dispatch_token
 ```
 
 `MISTRAL_EMBEDDING_BATCH_DELAY_MS` controls optional throttling between embedding batches.
 Use `0` (or leave unset) for no delay, or set a positive value such as `31000` when using a
 rate-limited Mistral plan.
+
+`CRON_SECRET` secures the scheduled generation worker route. On Vercel, the cron job configured in
+[`vercel.json`](./vercel.json) calls
+`/api/internal/generation-jobs/dispatch` every minute so queued exercise-generation jobs are still
+processed even if the original request process exits immediately after returning `202`.
 
 ### Development
 
@@ -102,6 +113,22 @@ Explore the database:
 ```shell
 npm run db:studio
 ```
+
+### Production worker dispatch
+
+Exercise generation uses the `generation_jobs` table as the durable queue and the internal dispatch
+route as the worker entrypoint.
+
+For Vercel deployments:
+
+1. Set `CRON_SECRET` in the project environment.
+2. Deploy [`vercel.json`](./vercel.json) so Vercel Cron calls `GET /api/internal/generation-jobs/dispatch` every minute.
+3. Optionally set `GENERATION_DISPATCH_TOKEN` if you also want to trigger manual `POST` dispatches outside the cron path.
+
+Operational recovery:
+
+- If generation jobs accumulate in `pending`, manually call `POST /api/internal/generation-jobs/dispatch` with `Authorization: Bearer $GENERATION_DISPATCH_TOKEN` and an optional `{ "maxJobs": <n> }` JSON body.
+- If only `CRON_SECRET` is configured, the same bearer token can be used for manual dispatch.
 
 ## Architecture
 

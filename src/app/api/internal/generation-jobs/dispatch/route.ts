@@ -13,6 +13,13 @@ type DispatchRequestBody = {
   maxJobs?: number;
 };
 
+function createUnauthorizedResponse() {
+  return NextResponse.json(
+    { error: 'UNAUTHORIZED', message: 'Authentication required' },
+    { status: 401 },
+  );
+}
+
 function extractBearerToken(request: Request) {
   const value = request.headers.get('authorization');
   if (!value || !value.startsWith('Bearer ')) {
@@ -41,42 +48,21 @@ function compareDispatchTokens(providedToken: string, dispatchToken: string) {
   return timingSafeEqual(providedDigest, dispatchDigest);
 }
 
-export async function POST(request: Request) {
-  const dispatchToken = Env.GENERATION_DISPATCH_TOKEN;
+function isAuthorizedDispatchRequest(request: Request) {
   const providedToken = extractBearerToken(request);
+  const dispatchTokens = [
+    Env.CRON_SECRET,
+    Env.GENERATION_DISPATCH_TOKEN,
+  ].filter((token): token is string => Boolean(token));
 
-  if (!dispatchToken || !providedToken || !compareDispatchTokens(providedToken, dispatchToken)) {
-    return NextResponse.json(
-      { error: 'UNAUTHORIZED', message: 'Authentication required' },
-      { status: 401 },
-    );
+  if (!providedToken || dispatchTokens.length === 0) {
+    return false;
   }
 
-  let maxJobs = DEFAULT_MAX_JOBS;
+  return dispatchTokens.some(dispatchToken => compareDispatchTokens(providedToken, dispatchToken));
+}
 
-  const rawBody = await request.text();
-  if (rawBody.trim().length > 0) {
-    try {
-      const parsedBody = JSON.parse(rawBody) as DispatchRequestBody;
-      if (parsedBody.maxJobs !== undefined) {
-        const parsed = normalizeMaxJobs(parsedBody.maxJobs);
-        if (!parsed) {
-          return NextResponse.json(
-            { error: 'INVALID_REQUEST', message: `maxJobs must be an integer between 1 and ${MAX_ALLOWED_JOBS}` },
-            { status: 422 },
-          );
-        }
-
-        maxJobs = parsed;
-      }
-    } catch {
-      return NextResponse.json(
-        { error: 'INVALID_REQUEST', message: 'Invalid JSON payload' },
-        { status: 422 },
-      );
-    }
-  }
-
+async function runDispatch(maxJobs: number) {
   try {
     const batch = await runGenerationWorkerBatch({ maxJobs });
     const remainingPendingEstimate = await countPendingGenerationJobs();
@@ -106,4 +92,45 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(request: Request) {
+  if (!isAuthorizedDispatchRequest(request)) {
+    return createUnauthorizedResponse();
+  }
+
+  return runDispatch(DEFAULT_MAX_JOBS);
+}
+
+export async function POST(request: Request) {
+  if (!isAuthorizedDispatchRequest(request)) {
+    return createUnauthorizedResponse();
+  }
+
+  let maxJobs = DEFAULT_MAX_JOBS;
+
+  const rawBody = await request.text();
+  if (rawBody.trim().length > 0) {
+    try {
+      const parsedBody = JSON.parse(rawBody) as DispatchRequestBody;
+      if (parsedBody.maxJobs !== undefined) {
+        const parsed = normalizeMaxJobs(parsedBody.maxJobs);
+        if (!parsed) {
+          return NextResponse.json(
+            { error: 'INVALID_REQUEST', message: `maxJobs must be an integer between 1 and ${MAX_ALLOWED_JOBS}` },
+            { status: 422 },
+          );
+        }
+
+        maxJobs = parsed;
+      }
+    } catch {
+      return NextResponse.json(
+        { error: 'INVALID_REQUEST', message: 'Invalid JSON payload' },
+        { status: 422 },
+      );
+    }
+  }
+
+  return runDispatch(maxJobs);
 }

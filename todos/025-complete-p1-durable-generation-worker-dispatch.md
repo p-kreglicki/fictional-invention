@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p1
 issue_id: "025"
 tags: [code-review, reliability, architecture, async-jobs]
@@ -73,7 +73,7 @@ Exercise generation relies on an in-process worker trigger in the API runtime. I
 
 ## Recommended Action
 
-<!-- To be filled during triage -->
+Configure a scheduled dispatch path in deployment and secure it with bearer-token auth so pending jobs are claimed independently of the request lifecycle. Retain manual dispatch for operational recovery.
 
 ## Technical Details
 
@@ -92,10 +92,10 @@ Exercise generation relies on an in-process worker trigger in the API runtime. I
 
 ## Acceptance Criteria
 
-- [ ] Pending generation jobs are processed even if request process exits immediately
-- [ ] Dispatch mechanism is documented and configured in target deployment
-- [ ] Runbook includes recovery steps for worker interruption
-- [ ] Reliability test proves jobs are eventually claimed under process restarts
+- [x] Pending generation jobs are processed even if request process exits immediately
+- [x] Dispatch mechanism is documented and configured in target deployment
+- [x] Runbook includes recovery steps for worker interruption
+- [x] Reliability test proves jobs are eventually claimed under process restarts
 
 ## Work Log
 
@@ -110,6 +110,21 @@ Exercise generation relies on an in-process worker trigger in the API runtime. I
 
 **Learnings:**
 - Current execution path is best-effort unless external dispatch is configured.
+
+### 2026-03-05 - Scheduler-driven dispatch implemented
+
+**By:** Codex
+
+**Actions:**
+- Added Vercel cron scheduling in [`vercel.json`](/Users/piotrkreglicki/Projects/exercise-maker/vercel.json) for `GET /api/internal/generation-jobs/dispatch`.
+- Updated the internal dispatch route to accept either `CRON_SECRET` or `GENERATION_DISPATCH_TOKEN` via constant-time bearer comparison in [`src/app/api/internal/generation-jobs/dispatch/route.ts`](/Users/piotrkreglicki/Projects/exercise-maker/src/app/api/internal/generation-jobs/dispatch/route.ts).
+- Added route coverage in [`src/app/api/internal/generation-jobs/dispatch/route.test.ts`](/Users/piotrkreglicki/Projects/exercise-maker/src/app/api/internal/generation-jobs/dispatch/route.test.ts) for cron `GET`, manual `POST`, and CRON-only auth.
+- Added worker regression coverage in [`src/libs/ExerciseGeneration.worker.test.ts`](/Users/piotrkreglicki/Projects/exercise-maker/src/libs/ExerciseGeneration.worker.test.ts) showing later batch runs can continue draining persisted pending jobs.
+- Documented production setup and manual recovery steps in [`README.md`](/Users/piotrkreglicki/Projects/exercise-maker/README.md).
+
+**Learnings:**
+- Repo-owned scheduler config closes the operational gap that made the dispatch endpoint effectively dormant in production.
+- The dispatch endpoint is enough for durability because job claiming is already DB-backed and idempotent.
 
 ## Notes
 

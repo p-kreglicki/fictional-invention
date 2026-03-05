@@ -6,6 +6,7 @@ export const Env = createEnv({
     ARCJET_KEY: z.string().startsWith('ajkey_').optional(),
     CLERK_SECRET_KEY: z.string().min(1),
     CLERK_WEBHOOK_SECRET: z.string().startsWith('whsec_').optional(),
+    CRON_SECRET: z.string().min(1).optional(),
     DATABASE_URL: z.string().min(1),
     PINECONE_API_KEY: z.string().min(1).optional(),
     MISTRAL_API_KEY: z.string().min(1).optional(),
@@ -37,6 +38,7 @@ export const Env = createEnv({
     ARCJET_KEY: process.env.ARCJET_KEY,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET,
+    CRON_SECRET: process.env.CRON_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
     PINECONE_API_KEY: process.env.PINECONE_API_KEY,
     MISTRAL_API_KEY: process.env.MISTRAL_API_KEY,
@@ -61,3 +63,9 @@ export const Env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
   },
 });
+
+if (Env.NODE_ENV === 'production' && !Env.CRON_SECRET && !Env.GENERATION_DISPATCH_TOKEN) {
+  throw new Error(
+    'CRON_SECRET or GENERATION_DISPATCH_TOKEN must be configured in production to enable durable generation dispatch.',
+  );
+}
