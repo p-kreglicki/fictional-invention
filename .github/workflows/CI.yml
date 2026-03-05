@@ -146,6 +146,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build]
+    env:
+      CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
 
     steps:
       - uses: actions/checkout@v6
@@ -171,13 +173,13 @@ jobs:
           sudo chmod -R 777 test-results
 
       - name: Run visual regression tests
-        if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+        if: ${{ env.CHROMATIC_PROJECT_TOKEN != '' }}
         uses: chromaui/action@v13
         with:
           playwright: true
           exitOnceUploaded: true # Speed up by skipping the build results
           outputDir: storybook-static
-          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          projectToken: ${{ env.CHROMATIC_PROJECT_TOKEN }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v7
