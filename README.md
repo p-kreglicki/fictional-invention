@@ -78,7 +78,7 @@ Use `0` (or leave unset) for no delay, or set a positive value such as `31000` w
 rate-limited Mistral plan.
 
 `CRON_SECRET` secures the scheduled generation worker route. On Vercel, the cron job configured in
-[vercel.json](/Users/piotrkreglicki/Projects/exercise-maker/vercel.json) calls
+[`vercel.json`](./vercel.json) calls
 `/api/internal/generation-jobs/dispatch` every minute so queued exercise-generation jobs are still
 processed even if the original request process exits immediately after returning `202`.
 
@@ -122,7 +122,7 @@ route as the worker entrypoint.
 For Vercel deployments:
 
 1. Set `CRON_SECRET` in the project environment.
-2. Deploy [vercel.json](/Users/piotrkreglicki/Projects/exercise-maker/vercel.json) so Vercel Cron calls `GET /api/internal/generation-jobs/dispatch` every minute.
+2. Deploy [`vercel.json`](./vercel.json) so Vercel Cron calls `GET /api/internal/generation-jobs/dispatch` every minute.
 3. Optionally set `GENERATION_DISPATCH_TOKEN` if you also want to trigger manual `POST` dispatches outside the cron path.
 
 Operational recovery:
