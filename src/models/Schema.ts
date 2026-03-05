@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   integer,
   jsonb,
@@ -60,6 +61,13 @@ export const difficultyEnum = pgEnum('difficulty', [
   'beginner',
   'intermediate',
   'advanced',
+]);
+
+export const generationJobStatusEnum = pgEnum('generation_job_status', [
+  'pending',
+  'processing',
+  'completed',
+  'failed',
 ]);
 
 // Users table (synced from Clerk via webhook)
@@ -128,6 +136,25 @@ export const responsesSchema = pgTable('responses', {
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
 });
 
+// Generation jobs table (async exercise generation lifecycle)
+export const generationJobsSchema = pgTable('generation_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => usersSchema.id).notNull(),
+  status: generationJobStatusEnum('status').default('pending').notNull(),
+  exerciseType: exerciseTypeEnum('exercise_type').notNull(),
+  documentIds: uuid('document_ids').array().notNull(),
+  requestedCount: integer('requested_count').notNull(),
+  generatedCount: integer('generated_count').default(0).notNull(),
+  failedCount: integer('failed_count').default(0).notNull(),
+  exerciseIds: uuid('exercise_ids').array().default(sql`'{}'::uuid[]`).notNull(),
+  difficulty: difficultyEnum('difficulty'),
+  topicFocus: text('topic_focus'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  startedAt: timestamp('started_at', { mode: 'date' }),
+  completedAt: timestamp('completed_at', { mode: 'date' }),
+});
+
 // Type exports
 export type User = typeof usersSchema.$inferSelect;
 export type NewUser = typeof usersSchema.$inferInsert;
@@ -139,3 +166,5 @@ export type Exercise = typeof exercisesSchema.$inferSelect;
 export type NewExercise = typeof exercisesSchema.$inferInsert;
 export type Response = typeof responsesSchema.$inferSelect;
 export type NewResponse = typeof responsesSchema.$inferInsert;
+export type GenerationJob = typeof generationJobsSchema.$inferSelect;
+export type NewGenerationJob = typeof generationJobsSchema.$inferInsert;

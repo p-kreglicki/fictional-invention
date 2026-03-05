@@ -1,12 +1,13 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { useRouter } from '@/libs/I18nNavigation';
 import { CounterValidation } from '@/validations/CounterValidation';
 
 export const CounterForm = () => {
+  const locale = useLocale();
   const t = useTranslations('CounterForm');
   const form = useForm({
     resolver: zodResolver(CounterValidation),
@@ -17,7 +18,7 @@ export const CounterForm = () => {
   const router = useRouter();
 
   const handleIncrement = form.handleSubmit(async (data) => {
-    const response = await fetch(`/api/counter`, {
+    const response = await fetch(`/${locale}/api/counter`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
