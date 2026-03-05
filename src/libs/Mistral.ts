@@ -1,3 +1,5 @@
+import type * as z from 'zod';
+
 import { Mistral } from '@mistralai/mistralai';
 import {
   HTTPValidationError,
@@ -41,6 +43,7 @@ if (Env.NODE_ENV !== 'production' && mistral) {
 
 // Constants
 const MAX_BATCH_SIZE = 16;
+const CHAT_MODEL = 'mistral-small-latest';
 
 // Types
 export type EmbeddingResult = {
@@ -50,6 +53,62 @@ export type EmbeddingResult = {
     totalTokens: number;
   };
 };
+
+type StructuredChatInput<T extends z.ZodTypeAny> = {
+  systemPrompt: string;
+  userPrompt: string;
+  responseFormat: T;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+};
+
+type StructuredChatResult<T extends z.ZodTypeAny> = {
+  parsed: z.infer<T>;
+  rawContent: string | null;
+  usage: {
+    promptTokens: number;
+    totalTokens: number;
+  };
+};
+
+type JsonChatInput = {
+  systemPrompt: string;
+  userPrompt: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+};
+
+function extractTextContent(content: unknown): string | null {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const textParts = content
+    .map((part) => {
+      if (
+        typeof part === 'object'
+        && part
+        && 'text' in part
+        && typeof part.text === 'string'
+      ) {
+        return part.text;
+      }
+      return '';
+    })
+    .filter(Boolean);
+
+  if (textParts.length === 0) {
+    return null;
+  }
+
+  return textParts.join('\n');
+}
 
 /**
  * Create embeddings for an array of texts.
@@ -96,6 +155,76 @@ export async function createEmbeddings(texts: string[]): Promise<EmbeddingResult
 
     throw err;
   }
+}
+
+/**
+ * Creates structured chat completion parsed by a Zod schema.
+ * @param input - Chat prompts and expected schema.
+ * @returns Parsed result and token usage.
+ */
+export async function createStructuredChatCompletion<T extends z.ZodTypeAny>(
+  input: StructuredChatInput<T>,
+): Promise<StructuredChatResult<T>> {
+  if (!mistral) {
+    throw new Error('Mistral client not initialized. Check MISTRAL_API_KEY.');
+  }
+
+  const response = await mistral.chat.parse({
+    model: input.model ?? CHAT_MODEL,
+    temperature: input.temperature ?? 0.2,
+    maxTokens: input.maxTokens ?? 1200,
+    messages: [
+      { role: 'system', content: input.systemPrompt },
+      { role: 'user', content: input.userPrompt },
+    ],
+    responseFormat: input.responseFormat,
+  });
+
+  const choice = response.choices?.[0];
+  const parsed = choice?.message?.parsed;
+  if (!parsed) {
+    throw new Error('Mistral structured output parsing failed');
+  }
+
+  return {
+    parsed: parsed as z.infer<T>,
+    rawContent: extractTextContent(choice?.message?.content),
+    usage: {
+      promptTokens: response.usage?.promptTokens ?? 0,
+      totalTokens: response.usage?.totalTokens ?? 0,
+    },
+  };
+}
+
+/**
+ * Creates chat completion in JSON mode.
+ * @param input - Chat prompts and generation options.
+ * @returns Raw JSON message content.
+ */
+export async function createJsonChatCompletion(input: JsonChatInput): Promise<string> {
+  if (!mistral) {
+    throw new Error('Mistral client not initialized. Check MISTRAL_API_KEY.');
+  }
+
+  const response = await mistral.chat.complete({
+    model: input.model ?? CHAT_MODEL,
+    temperature: input.temperature ?? 0.2,
+    maxTokens: input.maxTokens ?? 1200,
+    messages: [
+      { role: 'system', content: input.systemPrompt },
+      { role: 'user', content: input.userPrompt },
+    ],
+    responseFormat: { type: 'json_object' },
+  });
+
+  const choice = response.choices?.[0];
+  const content = extractTextContent(choice?.message?.content);
+
+  if (!content) {
+    throw new Error('Mistral JSON mode returned empty content');
+  }
+
+  return content;
 }
 
 /**
