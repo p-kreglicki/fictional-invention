@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "022"
 tags: [code-review, performance, event-loop]
@@ -76,26 +76,28 @@ Yields to any pending microtasks (Promise callbacks) without the 1 ms timer cost
 
 ## Recommended Action
 
-<!-- To be filled during triage -->
+Replace the raw `setTimeout(fn, 0)` with a dedicated scheduler helper that prefers `setImmediate` and falls back to `setTimeout` only when `setImmediate` is unavailable. Keep the macrotask boundary so uploads still return `202` before any deferred extraction starts, and add a route test that proves response ordering for URL uploads.
 
 ## Technical Details
 
 **Affected files:**
 - `src/app/[locale]/api/documents/upload/route.ts`
+- `src/app/[locale]/api/documents/upload/route.test.ts`
 
 **Overhead per active job:** ≥1 ms startup delay × 10 concurrent = ≥10 ms unnecessary delay at full concurrency.
 
 ## Acceptance Criteria
 
-- [ ] `startDeferredJob` does not use `setTimeout`
-- [ ] `runDeferredUpload` is invoked directly (or via `queueMicrotask` if explicit yield is desired)
-- [ ] HTTP response still returns 202 before any job processing begins (unchanged behavior)
+- [x] `startDeferredJob` no longer relies on `setTimeout` in the Node runtime path
+- [x] Deferred jobs are started through a dedicated macrotask scheduler helper
+- [x] HTTP response still returns 202 before any job processing begins
 
 ## Work Log
 
 | Date | Action | Learnings |
 |------|--------|-----------|
 | 2026-03-02 | Created from PR #21 performance review | Performance Oracle identified unnecessary timer overhead |
+| 2026-03-05 | Replaced the zero-delay timer with a scheduler helper that prefers `setImmediate`, kept a `setTimeout` fallback for non-Node environments, and added a test proving the route returns `202` before URL extraction starts | Direct invocation and `queueMicrotask` would start deferred work too early; preserving a macrotask boundary avoids changing response timing |
 
 ## Resources
 

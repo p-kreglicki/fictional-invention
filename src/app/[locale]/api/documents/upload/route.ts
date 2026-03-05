@@ -55,7 +55,46 @@ type DeferredUploadJob = {
 };
 
 let activeJobs = 0;
-const pendingJobs: DeferredUploadJob[] = [];
+const pendingJobs = Array.from<DeferredUploadJob | undefined>({ length: MAX_PENDING_JOBS });
+let pendingHead = 0;
+let pendingTail = 0;
+let pendingCount = 0;
+
+function getPendingJobCount() {
+  return pendingCount;
+}
+
+function enqueuePendingJob(job: DeferredUploadJob) {
+  if (pendingCount >= MAX_PENDING_JOBS) {
+    return false;
+  }
+
+  pendingJobs[pendingTail] = job;
+  pendingTail = (pendingTail + 1) % MAX_PENDING_JOBS;
+  pendingCount += 1;
+  return true;
+}
+
+function dequeuePendingJob() {
+  if (pendingCount === 0) {
+    return undefined;
+  }
+
+  const job = pendingJobs[pendingHead];
+  pendingJobs[pendingHead] = undefined;
+  pendingHead = (pendingHead + 1) % MAX_PENDING_JOBS;
+  pendingCount -= 1;
+  return job;
+}
+
+function scheduleDeferredJob(callback: () => void) {
+  if (typeof globalThis.setImmediate === 'function') {
+    globalThis.setImmediate(callback);
+    return;
+  }
+
+  setTimeout(callback, 0);
+}
 
 function getRateLimitReason(decision: ArcjetDecision): ArcjetRateLimitReason | null {
   if (decision.reason.isRateLimit()) {
@@ -182,10 +221,10 @@ async function runDeferredUpload(input: DeferredUploadJob) {
     activeJobs--;
     logger.info('Deferred job completed', {
       activeJobs,
-      pendingJobs: pendingJobs.length,
+      pendingJobs: getPendingJobCount(),
     });
 
-    const next = pendingJobs.shift();
+    const next = dequeuePendingJob();
     if (next) {
       startDeferredJob(next);
     }
@@ -202,12 +241,12 @@ function startDeferredJob(input: DeferredUploadJob) {
     documentId: input.documentId,
     contentType: input.contentType,
     activeJobs,
-    pendingJobs: pendingJobs.length,
+    pendingJobs: getPendingJobCount(),
   });
 
-  setTimeout(() => {
+  scheduleDeferredJob(() => {
     void runDeferredUpload(input);
-  }, 0);
+  });
 }
 
 /**
@@ -223,25 +262,24 @@ function queueDeferredUpload(input: DeferredUploadJob): boolean {
     return true;
   }
 
-  if (pendingJobs.length >= MAX_PENDING_JOBS) {
+  if (!enqueuePendingJob(input)) {
     logger.warn('Deferred job queue full, rejecting job', {
       documentId: input.documentId,
       activeJobs,
-      pendingJobs: pendingJobs.length,
+      pendingJobs: getPendingJobCount(),
     });
     return false;
   }
 
-  pendingJobs.push(input);
   logger.info('Deferred job queued', {
     documentId: input.documentId,
     activeJobs,
-    pendingJobs: pendingJobs.length,
+    pendingJobs: getPendingJobCount(),
   });
 
-  if (pendingJobs.length >= QUEUE_WARNING_THRESHOLD) {
+  if (getPendingJobCount() >= QUEUE_WARNING_THRESHOLD) {
     logger.warn('Deferred job queue growing large', {
-      pendingJobs: pendingJobs.length,
+      pendingJobs: getPendingJobCount(),
       activeJobs,
     });
   }

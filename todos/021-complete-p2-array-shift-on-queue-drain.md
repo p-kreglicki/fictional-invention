@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "021"
 tags: [code-review, performance, data-structures]
@@ -89,12 +89,13 @@ At bounded queue depth ≤ 50 (after todo 019), `shift()` on 49 items is microse
 
 ## Recommended Action
 
-<!-- To be filled during triage -->
+Replace the array-drain path with a fixed-capacity FIFO queue tracked by `pendingHead`, `pendingTail`, and `pendingCount`. Keep the implementation local to the upload route, clear dequeued slots to release references promptly, and add a queue-drain test that proves jobs start in FIFO order once active slots free up.
 
 ## Technical Details
 
 **Affected files:**
 - `src/app/[locale]/api/documents/upload/route.ts`
+- `src/app/[locale]/api/documents/upload/route.test.ts`
 
 **Performance profile:**
 
@@ -106,15 +107,16 @@ At bounded queue depth ≤ 50 (after todo 019), `shift()` on 49 items is microse
 
 ## Acceptance Criteria
 
-- [ ] `pendingJobs` dequeue is O(1)
-- [ ] No array-level O(n) operation on the critical job-drain path
-- [ ] Existing queue semantics (FIFO, ordered drain) preserved
+- [x] `pendingJobs` dequeue is O(1)
+- [x] No array-level O(n) operation on the critical job-drain path
+- [x] Existing queue semantics (FIFO, ordered drain) preserved
 
 ## Work Log
 
 | Date | Action | Learnings |
 |------|--------|-----------|
 | 2026-03-02 | Created from PR #21 performance review | Performance Oracle identified O(n) dequeue |
+| 2026-03-05 | Replaced `pendingJobs.shift()` with a fixed-capacity FIFO queue in the upload route and added a FIFO drain test covering queued job start order | A circular queue keeps the hot path O(1) without adding a dependency or changing the queue’s external behavior |
 
 ## Resources
 
