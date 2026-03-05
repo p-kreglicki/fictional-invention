@@ -59,10 +59,17 @@ PINECONE_INDEX=italian-learning
 
 # Mistral AI
 MISTRAL_API_KEY=your_mistral_api_key
+# Optional: delay between embedding batches in milliseconds
+# 0 or unset = no artificial delay
+MISTRAL_EMBEDDING_BATCH_DELAY_MS=0
 
 # Database (production)
 DATABASE_URL=your_postgres_connection_string
 ```
+
+`MISTRAL_EMBEDDING_BATCH_DELAY_MS` controls optional throttling between embedding batches.
+Use `0` (or leave unset) for no delay, or set a positive value such as `31000` when using a
+rate-limited Mistral plan.
 
 ### Development
 
