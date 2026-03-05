@@ -70,7 +70,13 @@
   "DashboardLayout": {
     "dashboard_link": "Dashboard",
     "user_profile_link": "Manage your account",
+    "exercises_link": "Exercises",
     "sign_out": "Sign out"
+  },
+  "DashboardExercisesPage": {
+    "meta_title": "Exercises",
+    "title": "Exercises",
+    "description": "Exercise generation is not available on this branch."
   },
   "LocaleSwitcher": {
     "change_language": "Change language"

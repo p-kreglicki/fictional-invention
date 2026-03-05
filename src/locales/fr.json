@@ -70,7 +70,13 @@
   "DashboardLayout": {
     "dashboard_link": "Tableau de bord",
     "user_profile_link": "Gérer votre compte",
+    "exercises_link": "Exercices",
     "sign_out": "Se déconnecter"
+  },
+  "DashboardExercisesPage": {
+    "meta_title": "Exercices",
+    "title": "Exercices",
+    "description": "La génération d'exercices n'est pas disponible sur cette branche."
   },
   "LocaleSwitcher": {
     "change_language": "Changer de langue"
