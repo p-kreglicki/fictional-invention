@@ -19,6 +19,8 @@ export const Env = createEnv({
     UPLOAD_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().optional(),
     EXERCISE_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().optional(),
     EXERCISE_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().optional(),
+    RESPONSE_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().optional(),
+    RESPONSE_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().optional(),
     USE_PGLITE: z.string().optional(),
   },
   client: {
@@ -51,6 +53,8 @@ export const Env = createEnv({
     UPLOAD_RATE_LIMIT_WINDOW_SECONDS: process.env.UPLOAD_RATE_LIMIT_WINDOW_SECONDS,
     EXERCISE_RATE_LIMIT_MAX_REQUESTS: process.env.EXERCISE_RATE_LIMIT_MAX_REQUESTS,
     EXERCISE_RATE_LIMIT_WINDOW_SECONDS: process.env.EXERCISE_RATE_LIMIT_WINDOW_SECONDS,
+    RESPONSE_RATE_LIMIT_MAX_REQUESTS: process.env.RESPONSE_RATE_LIMIT_MAX_REQUESTS,
+    RESPONSE_RATE_LIMIT_WINDOW_SECONDS: process.env.RESPONSE_RATE_LIMIT_WINDOW_SECONDS,
     USE_PGLITE: process.env.USE_PGLITE,
     NEXT_PUBLIC_LOGGING_LEVEL: process.env.NEXT_PUBLIC_LOGGING_LEVEL,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

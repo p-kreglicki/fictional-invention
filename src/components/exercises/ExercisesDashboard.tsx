@@ -2,6 +2,7 @@
 
 import type { ExerciseCardItem } from './ExerciseCards';
 import type { ExerciseGenerationJobStatus } from './GenerationJobStatus';
+import type { ExerciseLatestResponse } from '@/validations/ResponseValidation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPollingGate } from '@/components/exercises/PollingGate';
@@ -236,6 +237,26 @@ export function ExercisesDashboard() {
     }
   }
 
+  function handleExerciseUpdated(input: {
+    exerciseId: string;
+    latestResponse: ExerciseLatestResponse;
+    timesAttempted: number;
+    averageScore: number | null;
+  }) {
+    setExercises(current => current.map((exercise) => {
+      if (exercise.id !== input.exerciseId) {
+        return exercise;
+      }
+
+      return {
+        ...exercise,
+        latestResponse: input.latestResponse,
+        timesAttempted: input.timesAttempted,
+        averageScore: input.averageScore,
+      };
+    }));
+  }
+
   if (isBootstrapping) {
     return <p className="text-sm text-gray-600">{t('loading')}</p>;
   }
@@ -255,7 +276,11 @@ export function ExercisesDashboard() {
       />
 
       <GenerationJobStatus jobs={jobs} />
-      <ExerciseCards exercises={exercises} />
+      <ExerciseCards
+        exercises={exercises}
+        apiBasePath={apiBasePath}
+        onExerciseUpdated={handleExerciseUpdated}
+      />
     </div>
   );
 }

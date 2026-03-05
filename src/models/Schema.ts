@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -7,6 +8,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -70,6 +72,11 @@ export const generationJobStatusEnum = pgEnum('generation_job_status', [
   'failed',
 ]);
 
+export const evaluationMethodEnum = pgEnum('evaluation_method', [
+  'deterministic',
+  'llm',
+]);
+
 // Users table (synced from Clerk via webhook)
 export const usersSchema = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -127,14 +134,26 @@ export const responsesSchema = pgTable('responses', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => usersSchema.id).notNull(),
   exerciseId: uuid('exercise_id').references(() => exercisesSchema.id).notNull(),
+  clientSubmissionId: uuid('client_submission_id').notNull(),
   answer: text('answer').notNull(),
   score: integer('score').notNull(),
+  evaluationMethod: evaluationMethodEnum('evaluation_method').notNull(),
   rubric: jsonb('rubric').notNull(),
   overallFeedback: text('overall_feedback').notNull(),
   suggestedReview: text('suggested_review').array(),
   responseTimeMs: integer('response_time_ms'),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-});
+}, table => ({
+  userSubmissionIdx: uniqueIndex('responses_user_submission_unique_idx').on(
+    table.userId,
+    table.clientSubmissionId,
+  ),
+  exerciseUserCreatedIdx: index('responses_exercise_user_created_idx').on(
+    table.exerciseId,
+    table.userId,
+    table.createdAt,
+  ),
+}));
 
 // Generation jobs table (async exercise generation lifecycle)
 export const generationJobsSchema = pgTable('generation_jobs', {
