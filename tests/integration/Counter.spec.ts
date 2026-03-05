@@ -1,10 +1,12 @@
 import { faker } from '@faker-js/faker';
 import { expect, test } from '@playwright/test';
 
+const counterApiPath = '/en/api/counter';
+
 test.describe('Counter', () => {
   test.describe('Basic database operations', () => {
     test('shouldn\'t increment the counter with an invalid input', async ({ page }) => {
-      const counter = await page.request.put('/api/counter', {
+      const counter = await page.request.put(counterApiPath, {
         data: {
           increment: 'incorrect',
         },
@@ -14,7 +16,7 @@ test.describe('Counter', () => {
     });
 
     test('shouldn\'t increment the counter with a negative number', async ({ page }) => {
-      const counter = await page.request.put('/api/counter', {
+      const counter = await page.request.put(counterApiPath, {
         data: {
           increment: -1,
         },
@@ -24,7 +26,7 @@ test.describe('Counter', () => {
     });
 
     test('shouldn\'t increment the counter with a number greater than 3', async ({ page }) => {
-      const counter = await page.request.put('/api/counter', {
+      const counter = await page.request.put(counterApiPath, {
         data: {
           increment: 5,
         },
@@ -38,7 +40,7 @@ test.describe('Counter', () => {
       // The default value is 0 when there is no `x-e2e-random-id` header
       const e2eRandomId = faker.number.int({ max: 1000000 });
 
-      let counter = await page.request.put('/api/counter', {
+      let counter = await page.request.put(counterApiPath, {
         data: {
           increment: 1,
         },
@@ -53,7 +55,7 @@ test.describe('Counter', () => {
       // Save the current count
       const count = counterJson.count;
 
-      counter = await page.request.put('/api/counter', {
+      counter = await page.request.put(counterApiPath, {
         data: {
           increment: 2,
         },
@@ -66,7 +68,7 @@ test.describe('Counter', () => {
       expect(counter.status()).toBe(200);
       expect(counterJson.count).toEqual(count + 2);
 
-      counter = await page.request.put('/api/counter', {
+      counter = await page.request.put(counterApiPath, {
         data: {
           increment: 1,
         },

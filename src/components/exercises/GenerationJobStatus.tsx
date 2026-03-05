@@ -20,20 +20,20 @@ type GenerationJobStatusProps = {
   jobs: ExerciseGenerationJobStatus[];
 };
 
-function statusLabelKey(status: JobStatus) {
+function statusLabel(t: ReturnType<typeof useTranslations<'DashboardExercisesPage'>>, status: JobStatus) {
   if (status === 'pending') {
-    return 'job_status_pending';
+    return t('job_status_pending');
   }
 
   if (status === 'processing') {
-    return 'job_status_processing';
+    return t('job_status_processing');
   }
 
   if (status === 'completed') {
-    return 'job_status_completed';
+    return t('job_status_completed');
   }
 
-  return 'job_status_failed';
+  return t('job_status_failed');
 }
 
 export function GenerationJobStatus(props: GenerationJobStatusProps) {
@@ -51,7 +51,7 @@ export function GenerationJobStatus(props: GenerationJobStatusProps) {
         {props.jobs.map(job => (
           <li key={job.id} className="rounded-sm border border-gray-200 bg-white p-3 text-sm">
             <div className="flex items-center justify-between gap-4">
-              <span className="font-medium text-gray-900">{t(statusLabelKey(job.status))}</span>
+              <span className="font-medium text-gray-900">{statusLabel(t, job.status)}</span>
               <span className="text-gray-600">
                 {job.generatedCount}
                 /
