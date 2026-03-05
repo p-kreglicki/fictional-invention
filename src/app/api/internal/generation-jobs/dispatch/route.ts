@@ -13,10 +13,26 @@ type DispatchRequestBody = {
   maxJobs?: number;
 };
 
+function getDispatchTokens() {
+  return [
+    Env.CRON_SECRET,
+    Env.GENERATION_DISPATCH_TOKEN,
+  ].filter((token): token is string => Boolean(token));
+}
+
 function createUnauthorizedResponse() {
   return NextResponse.json(
     { error: 'UNAUTHORIZED', message: 'Authentication required' },
     { status: 401 },
+  );
+}
+
+function createDispatchMisconfiguredResponse() {
+  logger.error('generation_worker_dispatch_misconfigured');
+
+  return NextResponse.json(
+    { error: 'MISCONFIGURED', message: 'Generation dispatch is not configured.' },
+    { status: 500 },
   );
 }
 
@@ -50,10 +66,7 @@ function compareDispatchTokens(providedToken: string, dispatchToken: string) {
 
 function isAuthorizedDispatchRequest(request: Request) {
   const providedToken = extractBearerToken(request);
-  const dispatchTokens = [
-    Env.CRON_SECRET,
-    Env.GENERATION_DISPATCH_TOKEN,
-  ].filter((token): token is string => Boolean(token));
+  const dispatchTokens = getDispatchTokens();
 
   if (!providedToken || dispatchTokens.length === 0) {
     return false;
@@ -95,6 +108,10 @@ async function runDispatch(maxJobs: number) {
 }
 
 export async function GET(request: Request) {
+  if (getDispatchTokens().length === 0) {
+    return createDispatchMisconfiguredResponse();
+  }
+
   if (!isAuthorizedDispatchRequest(request)) {
     return createUnauthorizedResponse();
   }
@@ -103,6 +120,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (getDispatchTokens().length === 0) {
+    return createDispatchMisconfiguredResponse();
+  }
+
   if (!isAuthorizedDispatchRequest(request)) {
     return createUnauthorizedResponse();
   }

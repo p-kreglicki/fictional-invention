@@ -22,16 +22,20 @@ describe('Env durable dispatch config', () => {
     vi.resetModules();
   });
 
-  it('throws in production when no dispatch secret is configured', async () => {
+  it('allows production without dispatch secrets', async () => {
     resetEnv({
       NODE_ENV: 'production',
       CRON_SECRET: undefined,
       GENERATION_DISPATCH_TOKEN: undefined,
     });
 
-    await expect(import('./Env')).rejects.toThrow(
-      'CRON_SECRET or GENERATION_DISPATCH_TOKEN must be configured in production to enable durable generation dispatch.',
-    );
+    await expect(import('./Env')).resolves.toMatchObject({
+      Env: expect.objectContaining({
+        NODE_ENV: 'production',
+        CRON_SECRET: undefined,
+        GENERATION_DISPATCH_TOKEN: undefined,
+      }),
+    });
   });
 
   it('allows development without dispatch secrets', async () => {

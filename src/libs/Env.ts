@@ -63,9 +63,3 @@ export const Env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
   },
 });
-
-if (Env.NODE_ENV === 'production' && !Env.CRON_SECRET && !Env.GENERATION_DISPATCH_TOKEN) {
-  throw new Error(
-    'CRON_SECRET or GENERATION_DISPATCH_TOKEN must be configured in production to enable durable generation dispatch.',
-  );
-}

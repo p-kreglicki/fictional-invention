@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRunGenerationWorkerBatch = vi.fn();
 const mockCountPendingGenerationJobs = vi.fn();
+const loggerErrorMock = vi.fn();
 const mockEnv: {
   CRON_SECRET: string | undefined;
   GENERATION_DISPATCH_TOKEN: string | undefined;
@@ -23,7 +24,7 @@ vi.mock('@/libs/Logger', () => ({
   logger: {
     info: vi.fn(),
     warn: vi.fn(),
-    error: vi.fn(),
+    error: loggerErrorMock,
     debug: vi.fn(),
   },
 }));
@@ -153,5 +154,24 @@ describe('/api/internal/generation-jobs/dispatch', () => {
 
     expect(response.status).toBe(200);
     expect(mockRunGenerationWorkerBatch).toHaveBeenCalledWith({ maxJobs: 10 });
+  });
+
+  it('returns 500 when dispatch secrets are missing', async () => {
+    mockEnv.CRON_SECRET = undefined;
+    mockEnv.GENERATION_DISPATCH_TOKEN = undefined;
+
+    const { POST } = await import('./route');
+    const response = await POST(new Request('http://localhost/api/internal/generation-jobs/dispatch', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer dispatch-token',
+      },
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe('MISCONFIGURED');
+    expect(mockRunGenerationWorkerBatch).not.toHaveBeenCalled();
+    expect(loggerErrorMock).toHaveBeenCalledWith('generation_worker_dispatch_misconfigured');
   });
 });
