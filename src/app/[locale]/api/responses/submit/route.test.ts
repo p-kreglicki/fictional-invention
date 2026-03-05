@@ -163,7 +163,28 @@ describe('POST /api/responses/submit', () => {
   });
 
   it('returns 409 when the submission id already exists', async () => {
-    mockFindDuplicateSubmission.mockResolvedValue({ id: 'response-1' });
+    mockFindDuplicateSubmission.mockResolvedValue({
+      response: {
+        id: 'response-1',
+        exerciseId: '550e8400-e29b-41d4-a716-446655440000',
+        score: 100,
+        rubric: {
+          accuracy: 40,
+          grammar: 30,
+          fluency: 20,
+          bonus: 10,
+        },
+        overallFeedback: 'Already processed.',
+        suggestedReview: [],
+        responseTimeMs: null,
+        createdAt: '2026-03-05T10:30:00.000Z',
+        evaluationMethod: 'deterministic',
+      },
+      exerciseStats: {
+        timesAttempted: 1,
+        averageScore: 100,
+      },
+    });
 
     const { POST } = await import('./route');
     const response = await POST(createRequest({
@@ -173,8 +194,8 @@ describe('POST /api/responses/submit', () => {
     }));
     const body = await response.json();
 
-    expect(response.status).toBe(409);
-    expect(body.error).toBe('DUPLICATE_SUBMISSION');
+    expect(response.status).toBe(200);
+    expect(body.response.id).toBe('response-1');
     expect(mockEvaluateExerciseAnswer).not.toHaveBeenCalled();
   });
 

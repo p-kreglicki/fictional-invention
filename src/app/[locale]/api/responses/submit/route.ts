@@ -131,10 +131,7 @@ export async function POST(request: Request) {
     });
 
     if (duplicateSubmission) {
-      const response = NextResponse.json(
-        { error: 'DUPLICATE_SUBMISSION', message: 'Submission already processed' },
-        { status: 409 },
-      );
+      const response = NextResponse.json(duplicateSubmission, { status: 200 });
 
       if (rateLimitReason) {
         setRateLimitHeaders(response, rateLimitReason);
@@ -167,6 +164,21 @@ export async function POST(request: Request) {
       return response;
     } catch (error) {
       if (isUniqueConstraintError(error)) {
+        const duplicateSubmission = await findDuplicateSubmission({
+          userId: user.id,
+          clientSubmissionId: parsedRequest.data.clientSubmissionId,
+        });
+
+        if (duplicateSubmission) {
+          const response = NextResponse.json(duplicateSubmission, { status: 200 });
+
+          if (rateLimitReason) {
+            setRateLimitHeaders(response, rateLimitReason);
+          }
+
+          return response;
+        }
+
         const response = NextResponse.json(
           { error: 'DUPLICATE_SUBMISSION', message: 'Submission already processed' },
           { status: 409 },

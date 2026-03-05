@@ -473,7 +473,7 @@
           "name": "client_submission_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "answer": {
           "name": "answer",
@@ -492,7 +492,7 @@
           "type": "evaluation_method",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "rubric": {
           "name": "rubric",
@@ -546,6 +546,7 @@
           "isUnique": true,
           "concurrently": false,
           "method": "btree",
+          "where": "\"client_submission_id\" IS NOT NULL",
           "with": {}
         },
         "responses_exercise_user_created_idx": {

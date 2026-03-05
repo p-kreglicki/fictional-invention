@@ -3,7 +3,6 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { exercisesSchema, responsesSchema } from '@/models/Schema';
 import {
-
   SubmitResponseSuccessSchema,
 } from '@/validations/ResponseValidation';
 
@@ -14,14 +13,46 @@ export async function findDuplicateSubmission(input: {
   const [response] = await db
     .select({
       id: responsesSchema.id,
+      exerciseId: responsesSchema.exerciseId,
+      score: responsesSchema.score,
+      evaluationMethod: responsesSchema.evaluationMethod,
+      rubric: responsesSchema.rubric,
+      overallFeedback: responsesSchema.overallFeedback,
+      suggestedReview: responsesSchema.suggestedReview,
+      responseTimeMs: responsesSchema.responseTimeMs,
+      createdAt: responsesSchema.createdAt,
+      timesAttempted: exercisesSchema.timesAttempted,
+      averageScore: exercisesSchema.averageScore,
     })
     .from(responsesSchema)
+    .innerJoin(exercisesSchema, eq(exercisesSchema.id, responsesSchema.exerciseId))
     .where(and(
       eq(responsesSchema.userId, input.userId),
       eq(responsesSchema.clientSubmissionId, input.clientSubmissionId),
+      eq(exercisesSchema.userId, input.userId),
     ));
 
-  return response ?? null;
+  if (!response) {
+    return null;
+  }
+
+  return SubmitResponseSuccessSchema.parse({
+    response: {
+      id: response.id,
+      exerciseId: response.exerciseId,
+      score: response.score,
+      rubric: response.rubric,
+      overallFeedback: response.overallFeedback,
+      suggestedReview: response.suggestedReview ?? [],
+      responseTimeMs: response.responseTimeMs ?? null,
+      createdAt: response.createdAt.toISOString(),
+      evaluationMethod: response.evaluationMethod ?? 'deterministic',
+    },
+    exerciseStats: {
+      timesAttempted: response.timesAttempted ?? 0,
+      averageScore: response.averageScore ?? null,
+    },
+  });
 }
 
 export async function recordExerciseResponse(input: {

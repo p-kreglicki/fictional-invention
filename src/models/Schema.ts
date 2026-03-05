@@ -134,10 +134,10 @@ export const responsesSchema = pgTable('responses', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => usersSchema.id).notNull(),
   exerciseId: uuid('exercise_id').references(() => exercisesSchema.id).notNull(),
-  clientSubmissionId: uuid('client_submission_id').notNull(),
+  clientSubmissionId: uuid('client_submission_id'),
   answer: text('answer').notNull(),
   score: integer('score').notNull(),
-  evaluationMethod: evaluationMethodEnum('evaluation_method').notNull(),
+  evaluationMethod: evaluationMethodEnum('evaluation_method'),
   rubric: jsonb('rubric').notNull(),
   overallFeedback: text('overall_feedback').notNull(),
   suggestedReview: text('suggested_review').array(),
@@ -147,7 +147,7 @@ export const responsesSchema = pgTable('responses', {
   userSubmissionIdx: uniqueIndex('responses_user_submission_unique_idx').on(
     table.userId,
     table.clientSubmissionId,
-  ),
+  ).where(sql`${table.clientSubmissionId} is not null`),
   exerciseUserCreatedIdx: index('responses_exercise_user_created_idx').on(
     table.exerciseId,
     table.userId,

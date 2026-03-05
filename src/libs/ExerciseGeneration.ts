@@ -887,11 +887,11 @@ export async function listLatestResponsesForExercises(userId: string, exerciseId
   }
 
   const rows = await db
-    .select({
+    .selectDistinctOn([responsesSchema.exerciseId], {
       id: responsesSchema.id,
       exerciseId: responsesSchema.exerciseId,
       score: responsesSchema.score,
-      evaluationMethod: responsesSchema.evaluationMethod,
+      evaluationMethod: sql<'deterministic' | 'llm'>`coalesce(${responsesSchema.evaluationMethod}::text, 'deterministic')`,
       rubric: responsesSchema.rubric,
       overallFeedback: responsesSchema.overallFeedback,
       suggestedReview: responsesSchema.suggestedReview,
@@ -903,17 +903,13 @@ export async function listLatestResponsesForExercises(userId: string, exerciseId
       eq(responsesSchema.userId, userId),
       inArray(responsesSchema.exerciseId, exerciseIds),
     ))
-    .orderBy(desc(responsesSchema.createdAt));
+    .orderBy(
+      responsesSchema.exerciseId,
+      desc(responsesSchema.createdAt),
+      desc(responsesSchema.id),
+    );
 
-  const latestByExerciseId = new Map<string, typeof rows[number]>();
-
-  for (const row of rows) {
-    if (!latestByExerciseId.has(row.exerciseId)) {
-      latestByExerciseId.set(row.exerciseId, row);
-    }
-  }
-
-  return latestByExerciseId;
+  return new Map(rows.map(row => [row.exerciseId, row]));
 }
 
 /**

@@ -24,6 +24,70 @@ type SubmissionState = {
   errorMessage: string | null;
 };
 
+type SubmissionDraft = {
+  answerKey: string;
+  clientSubmissionId: string;
+};
+
+const submissionDraftsStorageKey = 'exercise-submission-drafts';
+
+function buildAnswerKey(answer: string | number) {
+  return `${typeof answer}:${String(answer)}`;
+}
+
+function readSubmissionDrafts() {
+  if (typeof window === 'undefined') {
+    return {} as Record<string, SubmissionDraft>;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(submissionDraftsStorageKey);
+    if (!raw) {
+      return {} as Record<string, SubmissionDraft>;
+    }
+
+    const parsed = JSON.parse(raw) as Record<string, SubmissionDraft>;
+    return parsed ?? {};
+  } catch {
+    return {} as Record<string, SubmissionDraft>;
+  }
+}
+
+function writeSubmissionDrafts(value: Record<string, SubmissionDraft>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(submissionDraftsStorageKey, JSON.stringify(value));
+  } catch {
+    // Ignore storage failures and fall back to in-memory request protection.
+  }
+}
+
+function loadSubmissionDraft(exerciseId: string) {
+  return readSubmissionDrafts()[exerciseId] ?? null;
+}
+
+function persistSubmissionDraft(exerciseId: string, draft: SubmissionDraft) {
+  const drafts = readSubmissionDrafts();
+  writeSubmissionDrafts({
+    ...drafts,
+    [exerciseId]: draft,
+  });
+}
+
+function clearSubmissionDraft(exerciseId: string) {
+  const drafts = readSubmissionDrafts();
+  if (!(exerciseId in drafts)) {
+    return;
+  }
+
+  const nextDrafts = { ...drafts };
+  delete nextDrafts[exerciseId];
+  writeSubmissionDrafts(nextDrafts);
+}
+
 function getExerciseTypeLabel(input: {
   exercise: ExerciseCardItem;
   t: ReturnType<typeof useTranslations>;
@@ -160,6 +224,17 @@ export function ExerciseCards(props: ExerciseCardsProps) {
       return;
     }
 
+    const answerKey = buildAnswerKey(answer);
+    const existingDraft = loadSubmissionDraft(exercise.id);
+    const clientSubmissionId = existingDraft?.answerKey === answerKey
+      ? existingDraft.clientSubmissionId
+      : crypto.randomUUID();
+
+    persistSubmissionDraft(exercise.id, {
+      answerKey,
+      clientSubmissionId,
+    });
+
     const requestId = (requestIdByExerciseIdRef.current[exercise.id] ?? 0) + 1;
     requestIdByExerciseIdRef.current[exercise.id] = requestId;
 
@@ -180,7 +255,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
         body: JSON.stringify({
           exerciseId: exercise.id,
           answer,
-          clientSubmissionId: crypto.randomUUID(),
+          clientSubmissionId,
         }),
       });
 
@@ -203,6 +278,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
         timesAttempted: payload.exerciseStats.timesAttempted,
         averageScore: payload.exerciseStats.averageScore,
       });
+      clearSubmissionDraft(exercise.id);
 
       setSubmissionStateByExerciseId(current => ({
         ...current,
@@ -285,6 +361,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                         checked={answersByExerciseId[exercise.id] === String(index)}
                         disabled={submissionState?.isSubmitting}
                         onChange={(event) => {
+                          clearSubmissionDraft(exercise.id);
                           setAnswersByExerciseId(current => ({
                             ...current,
                             [exercise.id]: event.target.value,
@@ -316,6 +393,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                     value={answersByExerciseId[exercise.id] ?? ''}
                     disabled={submissionState?.isSubmitting}
                     onChange={(event) => {
+                      clearSubmissionDraft(exercise.id);
                       setAnswersByExerciseId(current => ({
                         ...current,
                         [exercise.id]: event.target.value,
@@ -347,6 +425,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                       value={answersByExerciseId[exercise.id] ?? ''}
                       disabled={submissionState?.isSubmitting}
                       onChange={(event) => {
+                        clearSubmissionDraft(exercise.id);
                         setAnswersByExerciseId(current => ({
                           ...current,
                           [exercise.id]: event.target.value,
