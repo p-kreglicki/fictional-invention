@@ -45,6 +45,10 @@ if (Env.NODE_ENV !== 'production' && mistral) {
 const MAX_BATCH_SIZE = 16;
 const CHAT_MODEL = 'mistral-small-latest';
 
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // Types
 export type EmbeddingResult = {
   embeddings: number[][];
@@ -112,7 +116,6 @@ function extractTextContent(content: unknown): string | null {
 
 /**
  * Create embeddings for an array of texts.
- * IMPORTANT: Free tier is limited to 2 requests/minute.
  * Batch up to 16 texts per request to maximize throughput.
  * @param texts - Array of text strings to embed (max 16)
  */
@@ -228,8 +231,8 @@ export async function createJsonChatCompletion(input: JsonChatInput): Promise<st
 }
 
 /**
- * Create embeddings for large datasets with rate limiting.
- * WARNING: Free tier is 2 req/min - this will be slow for large datasets.
+ * Create embeddings for large datasets in multiple batches.
+ * Optional inter-batch throttling is controlled via environment config.
  * @param texts - Array of text strings to embed
  * @param onProgress - Optional callback for progress updates
  */
@@ -238,6 +241,7 @@ export async function createEmbeddingsBatched(
   onProgress?: (completed: number, total: number) => void,
 ): Promise<number[][]> {
   const allEmbeddings: number[][] = [];
+  const batchDelayMs = Env.MISTRAL_EMBEDDING_BATCH_DELAY_MS ?? 0;
 
   for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
     const batch = texts.slice(i, i + MAX_BATCH_SIZE);
@@ -246,10 +250,10 @@ export async function createEmbeddingsBatched(
 
     onProgress?.(Math.min(i + MAX_BATCH_SIZE, texts.length), texts.length);
 
-    // Rate limit: 2 requests/min on free tier = 30s between requests
-    if (i + MAX_BATCH_SIZE < texts.length) {
-      logger.debug('Rate limiting: waiting 31s before next batch');
-      await new Promise(resolve => setTimeout(resolve, 31000));
+    const hasMoreBatches = i + MAX_BATCH_SIZE < texts.length;
+    if (hasMoreBatches && batchDelayMs > 0) {
+      logger.debug('Embedding batch throttling enabled', { batchDelayMs });
+      await wait(batchDelayMs);
     }
   }
 
