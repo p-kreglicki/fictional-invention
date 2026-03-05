@@ -42,6 +42,19 @@ function setRateLimitHeaders(response: NextResponse, reason: ArcjetRateLimitReas
   response.headers.set('X-RateLimit-Reset', String(reason.reset));
 }
 
+async function parseJsonBody(request: Request) {
+  try {
+    return {
+      success: true,
+      body: await request.json(),
+    } as const;
+  } catch {
+    return {
+      success: false,
+    } as const;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
@@ -71,10 +84,23 @@ export async function POST(request: Request) {
       logger.warn('Exercise rate limiting disabled - ARCJET_KEY not configured');
     }
 
-    const body = await request.json();
+    const parsedBody = await parseJsonBody(request);
+    if (!parsedBody.success) {
+      const response = NextResponse.json(
+        { error: 'INVALID_REQUEST', message: 'Invalid JSON payload' },
+        { status: 422 },
+      );
+
+      if (rateLimitReason) {
+        setRateLimitHeaders(response, rateLimitReason);
+      }
+
+      return response;
+    }
+
     const result = await enqueueExerciseGeneration({
       userId: user.id,
-      request: body,
+      request: parsedBody.body,
     });
 
     if (!result.success) {

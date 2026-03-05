@@ -3,7 +3,8 @@
 import type { ExerciseCardItem } from './ExerciseCards';
 import type { ExerciseGenerationJobStatus } from './GenerationJobStatus';
 import { useTranslations } from 'next-intl';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPollingGate } from '@/components/exercises/PollingGate';
 import { ExerciseCards } from './ExerciseCards';
 import { ExerciseGeneratorForm } from './ExerciseGeneratorForm';
 import { GenerationJobStatus } from './GenerationJobStatus';
@@ -57,6 +58,7 @@ function mergeJobs(current: ExerciseGenerationJobStatus[], incoming: ExerciseGen
 
 export function ExercisesDashboard() {
   const t = useTranslations('DashboardExercisesPage');
+  const pollingGateRef = useRef(createPollingGate());
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [documents, setDocuments] = useState<ReadyDocument[]>([]);
@@ -119,17 +121,29 @@ export function ExercisesDashboard() {
       return undefined;
     }
 
-    const interval = window.setInterval(() => {
-      void Promise.all(activeJobs.map(async (job) => {
-        const response = await fetch(`/api/exercises/jobs/${job.id}`);
-        if (!response.ok) {
-          return null;
+    let active = true;
+
+    async function pollActiveJobs() {
+      if (!active || !pollingGateRef.current.tryEnter()) {
+        return;
+      }
+
+      try {
+        const results = await Promise.all(activeJobs.map(async (job) => {
+          const response = await fetch(`/api/exercises/jobs/${job.id}`);
+          if (!response.ok) {
+            return null;
+          }
+
+          return response.json() as Promise<ExerciseGenerationJobStatus & {
+            exercises: ExerciseCardItem[];
+          }>;
+        }));
+
+        if (!active) {
+          return;
         }
 
-        return response.json() as Promise<ExerciseGenerationJobStatus & {
-          exercises: ExerciseCardItem[];
-        }>;
-      })).then((results) => {
         const filtered = results.filter((result): result is ExerciseGenerationJobStatus & { exercises: ExerciseCardItem[] } => {
           return Boolean(result);
         });
@@ -154,12 +168,22 @@ export function ExercisesDashboard() {
             return mergeExercises(current, exerciseResults);
           });
         }
-      }).catch(() => {
+      } catch {
+        if (!active) {
+          return;
+        }
         setErrorMessage(t('polling_error'));
-      });
+      } finally {
+        pollingGateRef.current.leave();
+      }
+    }
+
+    const interval = window.setInterval(() => {
+      void pollActiveJobs();
     }, 2000);
 
     return () => {
+      active = false;
       window.clearInterval(interval);
     };
   }, [activeJobs, t]);

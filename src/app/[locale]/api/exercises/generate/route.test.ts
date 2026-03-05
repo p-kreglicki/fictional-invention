@@ -53,6 +53,14 @@ function createRequest(body: Record<string, unknown>) {
   });
 }
 
+function createMalformedJsonRequest() {
+  return new Request('http://localhost/api/exercises/generate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{"documentIds":',
+  });
+}
+
 describe('POST /api/exercises/generate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -128,5 +136,16 @@ describe('POST /api/exercises/generate', () => {
     expect(response.headers.get('X-RateLimit-Remaining')).toBe('0');
     expect(response.headers.get('X-RateLimit-Reset')).toBe('60');
     expect(response.headers.get('Retry-After')).toBe('60');
+  });
+
+  it('returns 422 for malformed JSON payload', async () => {
+    const { POST } = await import('./route');
+    const response = await POST(createMalformedJsonRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error).toBe('INVALID_REQUEST');
+    expect(mockEnqueueExerciseGeneration).not.toHaveBeenCalled();
+    expect(mockKickGenerationWorker).not.toHaveBeenCalled();
   });
 });
