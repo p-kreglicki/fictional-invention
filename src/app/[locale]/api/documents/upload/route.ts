@@ -22,6 +22,9 @@ import { DocumentUploadSchema } from '@/validations/DocumentValidation';
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 const UPLOAD_RATE_LIMIT_MAX_REQUESTS = Env.UPLOAD_RATE_LIMIT_MAX_REQUESTS ?? 10;
 const UPLOAD_RATE_LIMIT_WINDOW_SECONDS = Env.UPLOAD_RATE_LIMIT_WINDOW_SECONDS ?? 60;
+const MAX_CONCURRENT_DEFERRED_JOBS = 10;
+const MAX_PENDING_JOBS = 50;
+const QUEUE_WARNING_THRESHOLD = 20;
 
 const uploadRateLimiter = arcjet.withRule(
   fixedWindow({
@@ -50,6 +53,9 @@ type DeferredUploadJob = {
   originalFilename?: string;
   extractText: () => Promise<DeferredExtractionResult>;
 };
+
+let activeJobs = 0;
+const pendingJobs: DeferredUploadJob[] = [];
 
 function getRateLimitReason(decision: ArcjetDecision): ArcjetRateLimitReason | null {
   if (decision.reason.isRateLimit()) {
@@ -99,6 +105,19 @@ function createReservationErrorResponse(input: {
 }
 
 /**
+ * Builds a 503 response for when the deferred job queue is at capacity.
+ * @returns API response indicating the server is temporarily overloaded
+ */
+function createQueueFullResponse() {
+  const response = NextResponse.json(
+    { error: 'SERVICE_OVERLOADED', message: 'Upload queue is at capacity. Please retry shortly.' },
+    { status: 503 },
+  );
+  response.headers.set('Retry-After', '30');
+  return response;
+}
+
+/**
  * Builds the accepted upload response for async processing.
  * @param documentId - Reserved document ID
  * @returns API response with accepted status
@@ -127,7 +146,7 @@ async function failDeferredDocument(documentId: string, message: string) {
 }
 
 /**
- * Processes a deferred upload job.
+ * Processes a deferred upload job and drains the pending queue.
  * @param input - Deferred upload metadata and extraction callback
  * @returns Promise that resolves when processing completes
  */
@@ -159,17 +178,75 @@ async function runDeferredUpload(input: DeferredUploadJob) {
       error,
     });
     await failDeferredDocument(input.documentId, 'An unexpected error occurred during processing.');
+  } finally {
+    activeJobs--;
+    logger.info('Deferred job completed', {
+      activeJobs,
+      pendingJobs: pendingJobs.length,
+    });
+
+    const next = pendingJobs.shift();
+    if (next) {
+      startDeferredJob(next);
+    }
   }
 }
 
 /**
- * Schedules deferred upload processing on the event loop.
+ * Starts a deferred job immediately, incrementing the active count.
  * @param input - Deferred upload job payload
  */
-function queueDeferredUpload(input: DeferredUploadJob) {
+function startDeferredJob(input: DeferredUploadJob) {
+  activeJobs++;
+  logger.info('Deferred job started', {
+    documentId: input.documentId,
+    contentType: input.contentType,
+    activeJobs,
+    pendingJobs: pendingJobs.length,
+  });
+
   setTimeout(() => {
     void runDeferredUpload(input);
   }, 0);
+}
+
+/**
+ * Queues a deferred upload job with bounded concurrency.
+ * Returns false when the pending queue is full; the caller must mark the document
+ * as failed and respond with 503.
+ * @param input - Deferred upload job payload
+ * @returns True when the job was accepted, false when the queue is at capacity
+ */
+function queueDeferredUpload(input: DeferredUploadJob): boolean {
+  if (activeJobs < MAX_CONCURRENT_DEFERRED_JOBS) {
+    startDeferredJob(input);
+    return true;
+  }
+
+  if (pendingJobs.length >= MAX_PENDING_JOBS) {
+    logger.warn('Deferred job queue full, rejecting job', {
+      documentId: input.documentId,
+      activeJobs,
+      pendingJobs: pendingJobs.length,
+    });
+    return false;
+  }
+
+  pendingJobs.push(input);
+  logger.info('Deferred job queued', {
+    documentId: input.documentId,
+    activeJobs,
+    pendingJobs: pendingJobs.length,
+  });
+
+  if (pendingJobs.length >= QUEUE_WARNING_THRESHOLD) {
+    logger.warn('Deferred job queue growing large', {
+      pendingJobs: pendingJobs.length,
+      activeJobs,
+    });
+  }
+
+  return true;
 }
 
 /**
@@ -299,16 +376,17 @@ async function handlePdfUpload(request: Request, userId: string) {
   }
 
   const documentId = reservation.documentId;
-  const buffer = Buffer.from(await file.arrayBuffer());
+  let buffer: Buffer | undefined = Buffer.from(await file.arrayBuffer());
 
-  queueDeferredUpload({
+  const queued = queueDeferredUpload({
     documentId,
     userId,
     title: documentTitle,
     contentType: 'pdf',
     originalFilename: file.name,
     extractText: async () => {
-      const extraction = await processPdf(buffer);
+      const extraction = await processPdf(buffer!);
+      buffer = undefined;
       if (!extraction.success) {
         return {
           success: false,
@@ -322,6 +400,11 @@ async function handlePdfUpload(request: Request, userId: string) {
       };
     },
   });
+
+  if (!queued) {
+    await failDeferredDocument(documentId, 'Upload queue is at capacity.');
+    return createQueueFullResponse();
+  }
 
   return createAcceptedUploadResponse(documentId);
 }
@@ -379,7 +462,7 @@ async function handleUrlUpload(
 
   const documentId = reservation.documentId;
 
-  queueDeferredUpload({
+  const queued = queueDeferredUpload({
     documentId,
     userId,
     title: fallbackTitle.slice(0, 200),
@@ -401,6 +484,11 @@ async function handleUrlUpload(
       };
     },
   });
+
+  if (!queued) {
+    await failDeferredDocument(documentId, 'Upload queue is at capacity.');
+    return createQueueFullResponse();
+  }
 
   return createAcceptedUploadResponse(documentId);
 }
@@ -439,7 +527,8 @@ async function handleTextUpload(
   }
 
   const documentId = reservation.documentId;
-  queueDeferredUpload({
+
+  const queued = queueDeferredUpload({
     documentId,
     userId,
     title: data.title.slice(0, 200),
@@ -449,6 +538,11 @@ async function handleTextUpload(
       text: sanitized,
     }),
   });
+
+  if (!queued) {
+    await failDeferredDocument(documentId, 'Upload queue is at capacity.');
+    return createQueueFullResponse();
+  }
 
   return createAcceptedUploadResponse(documentId);
 }
