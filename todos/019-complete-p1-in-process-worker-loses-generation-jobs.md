@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p1
 issue_id: "019"
 tags: [code-review, architecture, reliability, background-jobs]
@@ -75,7 +75,7 @@ Generation jobs are queued with `setTimeout(..., 0)` inside the API process. If 
 
 ## Recommended Action
 
-<!-- To be filled during triage -->
+Use the database-backed `generation_jobs` table as the durable queue and move production dispatch responsibility to the scheduled internal worker route. Keep `kickGenerationWorker` only as a best-effort latency optimization for request-local execution.
 
 ## Technical Details
 
@@ -93,10 +93,10 @@ Generation jobs are queued with `setTimeout(..., 0)` inside the API process. If 
 
 ## Acceptance Criteria
 
-- [ ] Job dispatch survives API process recycle/redeploy
-- [ ] Pending jobs are picked up by a durable worker mechanism
-- [ ] Duplicate execution is prevented (claim/lock/idempotency strategy documented)
-- [ ] Tests or runbook cover worker interruption and recovery scenarios
+- [x] Job dispatch survives API process recycle/redeploy
+- [x] Pending jobs are picked up by a durable worker mechanism
+- [x] Duplicate execution is prevented (claim/lock/idempotency strategy documented)
+- [x] Tests or runbook cover worker interruption and recovery scenarios
 
 ## Work Log
 
@@ -112,6 +112,21 @@ Generation jobs are queued with `setTimeout(..., 0)` inside the API process. If 
 **Learnings:**
 - The current approach is best-effort async, not durable background processing.
 - Stale recovery limits impact but does not recover lost jobs.
+
+### 2026-03-05 - Durable dispatch implemented
+
+**By:** Codex
+
+**Actions:**
+- Added repo-owned Vercel cron configuration in [`vercel.json`](/Users/piotrkreglicki/Projects/exercise-maker/vercel.json) to invoke the internal dispatch endpoint every minute.
+- Updated [`src/app/api/internal/generation-jobs/dispatch/route.ts`](/Users/piotrkreglicki/Projects/exercise-maker/src/app/api/internal/generation-jobs/dispatch/route.ts) to accept authenticated cron `GET` requests, while preserving authenticated manual `POST` dispatch.
+- Added `CRON_SECRET` validation in [`src/libs/Env.ts`](/Users/piotrkreglicki/Projects/exercise-maker/src/libs/Env.ts) and documented deployment/recovery flow in [`README.md`](/Users/piotrkreglicki/Projects/exercise-maker/README.md).
+- Clarified in [`src/libs/ExerciseGeneration.ts`](/Users/piotrkreglicki/Projects/exercise-maker/src/libs/ExerciseGeneration.ts) that local worker kickoff is best-effort only.
+- Verified dispatch behavior with route tests and added a worker-batch regression test proving later batch runs can claim jobs left pending by earlier runs.
+
+**Learnings:**
+- The correct durability boundary is the persisted job row plus an external scheduler, not the request process lifetime.
+- Existing `FOR UPDATE SKIP LOCKED` claim semantics were already sufficient to avoid duplicate execution once durable dispatch was added.
 
 ## Notes
 

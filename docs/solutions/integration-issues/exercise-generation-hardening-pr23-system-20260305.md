@@ -107,5 +107,5 @@ This makes behavior deterministic under malformed input and high-latency conditi
   - [026](../../../todos/026-complete-p2-disambiguate-source-chunk-references.md)
   - [027](../../../todos/027-complete-p2-return-500-for-enqueue-internal-failures.md)
   - [028](../../../todos/028-complete-p3-use-constant-time-dispatch-token-compare.md)
-- Outstanding reliability risk:
-  - [025](../../../todos/025-pending-p1-durable-generation-worker-dispatch.md)
+- Completed reliability follow-up:
+  - [025](../../../todos/025-complete-p1-durable-generation-worker-dispatch.md)

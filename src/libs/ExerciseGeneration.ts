@@ -724,7 +724,9 @@ function triggerLocalGenerationWorker(input: { userId?: string }) {
 }
 
 /**
- * Triggers non-blocking local worker processing when a new job is enqueued.
+ * Triggers best-effort local worker processing when a new job is enqueued.
+ * Production durability comes from the scheduled internal dispatch route, not
+ * from the request process remaining alive after the response is returned.
  * @param userId - Optional user scope for stale recovery prior to claiming work.
  */
 export function kickGenerationWorker(userId?: string) {
