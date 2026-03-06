@@ -1,5 +1,6 @@
 import type { EvaluationResult } from '@/validations/ResponseValidation';
 import { and, eq, sql } from 'drizzle-orm';
+import { ExerciseNotFoundError } from '@/libs/AnswerEvaluation';
 import { db } from '@/libs/DB';
 import { exercisesSchema, responsesSchema } from '@/models/Schema';
 import {
@@ -64,6 +65,15 @@ export async function recordExerciseResponse(input: {
   evaluation: EvaluationResult;
 }) {
   return db.transaction(async (tx) => {
+    const lockResult = await tx.execute(
+      sql`SELECT ${exercisesSchema.id} FROM ${exercisesSchema} WHERE ${exercisesSchema.id} = ${input.exerciseId} AND ${exercisesSchema.userId} = ${input.userId} FOR UPDATE`,
+    );
+
+    const lockedExerciseRow = lockResult.rows[0] as { id?: unknown } | undefined;
+    if (typeof lockedExerciseRow?.id !== 'string') {
+      throw new ExerciseNotFoundError();
+    }
+
     const [response] = await tx
       .insert(responsesSchema)
       .values({
