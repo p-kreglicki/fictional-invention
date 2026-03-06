@@ -7,6 +7,7 @@ import type {
 } from '@/validations/ResponseValidation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
+import { SubmissionDraftsSchema, SubmitResponseSuccessSchema } from '@/validations/ResponseValidation';
 
 type ExerciseCardsProps = {
   exercises: ExerciseCardItem[];
@@ -17,6 +18,7 @@ type ExerciseCardsProps = {
     timesAttempted: number;
     averageScore: number | null;
   }) => void;
+  onExerciseSyncRequested?: (exerciseId: string) => Promise<SubmitResponseSuccess | null>;
 };
 
 type SubmissionState = {
@@ -46,8 +48,12 @@ function readSubmissionDrafts() {
       return {} as Record<string, SubmissionDraft>;
     }
 
-    const parsed = JSON.parse(raw) as Record<string, SubmissionDraft>;
-    return parsed ?? {};
+    const parsed = SubmissionDraftsSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      return {} as Record<string, SubmissionDraft>;
+    }
+
+    return parsed.data;
   } catch {
     return {} as Record<string, SubmissionDraft>;
   }
@@ -208,10 +214,46 @@ export function ExerciseCards(props: ExerciseCardsProps) {
   const requestIdByExerciseIdRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
       isMountedRef.current = false;
     };
   }, []);
+
+  function isLatestRequest(exerciseId: string, requestId: number) {
+    return requestIdByExerciseIdRef.current[exerciseId] === requestId;
+  }
+
+  function applySubmissionResult(input: {
+    exerciseId: string;
+    payload: SubmitResponseSuccess;
+  }) {
+    props.onExerciseUpdated({
+      exerciseId: input.exerciseId,
+      latestResponse: input.payload.response,
+      timesAttempted: input.payload.exerciseStats.timesAttempted,
+      averageScore: input.payload.exerciseStats.averageScore,
+    });
+  }
+
+  function setSubmissionIdle(input: {
+    exerciseId: string;
+    requestId: number;
+    errorMessage: string | null;
+  }) {
+    if (!isMountedRef.current || !isLatestRequest(input.exerciseId, input.requestId)) {
+      return;
+    }
+
+    setSubmissionStateByExerciseId(current => ({
+      ...current,
+      [input.exerciseId]: {
+        isSubmitting: false,
+        errorMessage: input.errorMessage,
+      },
+    }));
+  }
 
   async function handleSubmit(exercise: ExerciseCardItem) {
     const currentState = submissionStateByExerciseId[exercise.id];
@@ -270,46 +312,60 @@ export function ExerciseCards(props: ExerciseCardsProps) {
         }),
       });
 
-      const payload = await response.json() as Partial<SubmitResponseSuccess> & {
+      const payload = await response.json() as {
         error?: string;
         message?: string;
       };
+      const parsedPayload = SubmitResponseSuccessSchema.safeParse(payload);
 
-      if (!response.ok || !payload.response || !payload.exerciseStats) {
+      if (!response.ok) {
         throw new Error(payload.message ?? payload.error ?? t('submission_failed'));
       }
 
-      if (!isMountedRef.current || requestIdByExerciseIdRef.current[exercise.id] !== requestId) {
+      if (!parsedPayload.success) {
+        const refreshedPayload = await props.onExerciseSyncRequested?.(exercise.id) ?? null;
+        if (!refreshedPayload) {
+          throw new Error(t('submission_failed'));
+        }
+
+        if (!isMountedRef.current || !isLatestRequest(exercise.id, requestId)) {
+          return;
+        }
+
+        applySubmissionResult({
+          exerciseId: exercise.id,
+          payload: refreshedPayload,
+        });
+        clearSubmissionDraft(exercise.id);
+        setSubmissionIdle({
+          exerciseId: exercise.id,
+          requestId,
+          errorMessage: null,
+        });
         return;
       }
 
-      props.onExerciseUpdated({
+      if (!isMountedRef.current || !isLatestRequest(exercise.id, requestId)) {
+        return;
+      }
+
+      applySubmissionResult({
         exerciseId: exercise.id,
-        latestResponse: payload.response,
-        timesAttempted: payload.exerciseStats.timesAttempted,
-        averageScore: payload.exerciseStats.averageScore,
+        payload: parsedPayload.data,
       });
       clearSubmissionDraft(exercise.id);
 
-      setSubmissionStateByExerciseId(current => ({
-        ...current,
-        [exercise.id]: {
-          isSubmitting: false,
-          errorMessage: null,
-        },
-      }));
+      setSubmissionIdle({
+        exerciseId: exercise.id,
+        requestId,
+        errorMessage: null,
+      });
     } catch (error) {
-      if (!isMountedRef.current || requestIdByExerciseIdRef.current[exercise.id] !== requestId) {
-        return;
-      }
-
-      setSubmissionStateByExerciseId(current => ({
-        ...current,
-        [exercise.id]: {
-          isSubmitting: false,
-          errorMessage: getSubmissionErrorMessage({ error, t }),
-        },
-      }));
+      setSubmissionIdle({
+        exerciseId: exercise.id,
+        requestId,
+        errorMessage: getSubmissionErrorMessage({ error, t }),
+      });
     }
   }
 

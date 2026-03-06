@@ -2,20 +2,18 @@
 
 import type { ExerciseCardItem } from './ExerciseCards';
 import type { ExerciseGenerationJobStatus } from './GenerationJobStatus';
+import type { DocumentListItem } from '@/validations/DocumentValidation';
 import type { ExerciseLatestResponse } from '@/validations/ResponseValidation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { z } from 'zod';
 import { createPollingGate } from '@/components/exercises/PollingGate';
+import { Link } from '@/libs/I18nNavigation';
+import { DocumentListItemSchema } from '@/validations/DocumentValidation';
+import { ExerciseCardSchema, SubmitResponseSuccessSchema } from '@/validations/ResponseValidation';
 import { ExerciseCards } from './ExerciseCards';
 import { ExerciseGeneratorForm } from './ExerciseGeneratorForm';
 import { GenerationJobStatus } from './GenerationJobStatus';
-
-type ReadyDocument = {
-  id: string;
-  title: string;
-  contentType: 'pdf' | 'url' | 'text';
-  status: 'uploading' | 'processing' | 'ready' | 'failed';
-};
 
 type GenerateRequest = {
   documentIds: string[];
@@ -24,6 +22,14 @@ type GenerateRequest = {
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
   topicFocus?: string;
 };
+
+const DocumentsResponseSchema = z.object({
+  documents: z.array(DocumentListItemSchema),
+});
+
+const ExercisesSyncResponseSchema = z.object({
+  exercises: z.array(ExerciseCardSchema),
+});
 
 function mergeExercises(current: ExerciseCardItem[], incoming: ExerciseCardItem[]) {
   const map = new Map<string, ExerciseCardItem>();
@@ -64,7 +70,7 @@ export function ExercisesDashboard() {
   const pollingGateRef = useRef(createPollingGate());
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [documents, setDocuments] = useState<ReadyDocument[]>([]);
+  const [documents, setDocuments] = useState<DocumentListItem[]>([]);
   const [jobs, setJobs] = useState<ExerciseGenerationJobStatus[]>([]);
   const [exercises, setExercises] = useState<ExerciseCardItem[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -83,17 +89,21 @@ export function ExercisesDashboard() {
           throw new Error('bootstrap_failed');
         }
 
-        const documentsPayload = await documentsResponse.json() as { documents: ReadyDocument[] };
+        const documentsPayload = DocumentsResponseSchema.safeParse(await documentsResponse.json() as unknown);
         const exercisesPayload = await exercisesResponse.json() as {
           exercises: ExerciseCardItem[];
           activeJobs: ExerciseGenerationJobStatus[];
         };
 
+        if (!documentsPayload.success) {
+          throw new Error('documents_invalid');
+        }
+
         if (!active) {
           return;
         }
 
-        setDocuments(documentsPayload.documents.filter(document => document.status === 'ready'));
+        setDocuments(documentsPayload.data.documents);
         setExercises(exercisesPayload.exercises);
         setJobs(exercisesPayload.activeJobs);
       } catch {
@@ -118,6 +128,18 @@ export function ExercisesDashboard() {
   const activeJobs = useMemo(() => {
     return jobs.filter(job => job.status === 'pending' || job.status === 'processing');
   }, [jobs]);
+
+  const readyDocuments = useMemo(() => {
+    return documents.filter(document => document.status === 'ready');
+  }, [documents]);
+
+  const processingDocumentsCount = useMemo(() => {
+    return documents.filter(document => document.status === 'uploading' || document.status === 'processing').length;
+  }, [documents]);
+
+  const failedDocumentsCount = useMemo(() => {
+    return documents.filter(document => document.status === 'failed').length;
+  }, [documents]);
 
   useEffect(() => {
     if (activeJobs.length === 0) {
@@ -257,9 +279,44 @@ export function ExercisesDashboard() {
     }));
   }
 
+  async function handleExerciseSyncRequested(exerciseId: string) {
+    try {
+      const response = await fetch(`${apiBasePath}/exercises`);
+      if (!response.ok) {
+        return null;
+      }
+
+      const parsedPayload = ExercisesSyncResponseSchema.safeParse(await response.json() as unknown);
+      if (!parsedPayload.success) {
+        return null;
+      }
+
+      const matchedExercise = parsedPayload.data.exercises.find(exercise => exercise.id === exerciseId);
+      if (!matchedExercise?.latestResponse) {
+        return null;
+      }
+
+      setExercises(current => mergeExercises(current, [matchedExercise]));
+
+      return SubmitResponseSuccessSchema.parse({
+        response: matchedExercise.latestResponse,
+        exerciseStats: {
+          timesAttempted: matchedExercise.timesAttempted,
+          averageScore: matchedExercise.averageScore,
+        },
+      });
+    } catch {
+      return null;
+    }
+  }
+
   if (isBootstrapping) {
     return <p className="text-sm text-gray-600">{t('loading')}</p>;
   }
+
+  const showNoDocumentsState = documents.length === 0;
+  const showProcessingState = readyDocuments.length === 0 && processingDocumentsCount > 0;
+  const showFailedState = readyDocuments.length === 0 && failedDocumentsCount > 0 && processingDocumentsCount === 0;
 
   return (
     <div className="space-y-6 py-5">
@@ -268,8 +325,44 @@ export function ExercisesDashboard() {
         <p className="text-sm text-gray-600">{t('description')}</p>
       </header>
 
+      {(showNoDocumentsState || showProcessingState || showFailedState) && (
+        <section className="rounded-md border border-gray-200 bg-gray-50 p-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            {showNoDocumentsState
+              ? t('state_no_documents_title')
+              : showProcessingState
+                ? t('state_processing_title')
+                : t('state_failed_title')}
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            {showNoDocumentsState
+              ? t('state_no_documents_description')
+              : showProcessingState
+                ? t('state_processing_description', { count: processingDocumentsCount })
+                : t('state_failed_description', { count: failedDocumentsCount })}
+          </p>
+          <Link
+            href="/dashboard/content/"
+            className="mt-4 inline-flex rounded-sm bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            {t('state_content_cta')}
+          </Link>
+        </section>
+      )}
+
+      {readyDocuments.length > 0 && (processingDocumentsCount > 0 || failedDocumentsCount > 0) && (
+        <section className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          {processingDocumentsCount > 0 && (
+            <p>{t('state_partial_processing', { count: processingDocumentsCount })}</p>
+          )}
+          {failedDocumentsCount > 0 && (
+            <p>{t('state_partial_failed', { count: failedDocumentsCount })}</p>
+          )}
+        </section>
+      )}
+
       <ExerciseGeneratorForm
-        documents={documents}
+        documents={readyDocuments}
         isSubmitting={isSubmitting}
         onSubmit={handleGenerate}
         serverError={errorMessage}
@@ -280,6 +373,7 @@ export function ExercisesDashboard() {
         exercises={exercises}
         apiBasePath={apiBasePath}
         onExerciseUpdated={handleExerciseUpdated}
+        onExerciseSyncRequested={handleExerciseSyncRequested}
       />
     </div>
   );

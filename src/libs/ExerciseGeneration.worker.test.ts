@@ -18,13 +18,126 @@ type JobState = {
   completedAt: Date | null;
 };
 
+type ChunkRow = {
+  id: string;
+  documentId: string;
+  position: number;
+};
+
+type PineconeMatch = {
+  metadata?: {
+    document_id?: string;
+    chunk_position?: number;
+    text?: string;
+  };
+};
+
 const state = {
   jobs: [] as JobState[],
   recoverPhase: 0,
   txSelectedId: null as string | null,
+  chunkRows: [] as ChunkRow[],
+  pineconeMatches: [] as PineconeMatch[],
+  insertedExercises: [] as Array<{ id: string; values: Record<string, unknown> }>,
+  nextExerciseId: 1,
+  lastInsertedExerciseId: null as string | null,
 };
 
+const loggerInfoMock = vi.fn();
+const loggerWarnMock = vi.fn();
+const loggerErrorMock = vi.fn();
+const loggerDebugMock = vi.fn();
+
+const mockCreateEmbeddings = vi.fn(async () => ({
+  embeddings: [[0.1]],
+  usage: { promptTokens: 1, totalTokens: 1 },
+}));
+const mockCreateStructuredChatCompletion = vi.fn();
+const mockCreateJsonChatCompletion = vi.fn();
+const mockPineconeQuery = vi.fn(async () => ({ matches: state.pineconeMatches }));
+
 let txLock = Promise.resolve();
+
+function getActiveJob() {
+  return state.jobs.find(job => job.status === 'processing')
+    ?? state.jobs.find(job => job.id === state.txSelectedId)
+    ?? null;
+}
+
+function applyJobUpdate(values: Record<string, unknown>) {
+  if (values.errorMessage === 'WORKER_INTERRUPTED') {
+    const now = new Date('2026-03-05T18:00:00.000Z');
+    const stalePendingBefore = new Date(now.getTime() - 10 * 60 * 1000);
+    const staleProcessingBefore = new Date(now.getTime() - 20 * 60 * 1000);
+
+    const matching = state.jobs.filter((job) => {
+      if (state.recoverPhase === 0) {
+        return job.status === 'pending' && job.createdAt < stalePendingBefore;
+      }
+
+      if (job.status !== 'processing') {
+        return false;
+      }
+
+      const baseline = job.startedAt ?? job.createdAt;
+      return baseline < staleProcessingBefore;
+    });
+
+    for (const job of matching) {
+      job.status = 'failed';
+      job.errorMessage = 'WORKER_INTERRUPTED';
+      job.completedAt = now;
+    }
+
+    state.recoverPhase += 1;
+    return matching.map(job => ({ id: job.id }));
+  }
+
+  const activeJob = getActiveJob();
+  if (!activeJob) {
+    return [];
+  }
+
+  if (values.errorMessage === 'NO_CONTENT') {
+    activeJob.status = 'failed';
+    activeJob.errorMessage = 'NO_CONTENT';
+    activeJob.completedAt = values.completedAt as Date ?? new Date('2026-03-05T18:00:00.000Z');
+    return [];
+  }
+
+  if ('generatedCount' in values && 'exerciseIds' in values && !Array.isArray(values.exerciseIds)) {
+    activeJob.generatedCount += 1;
+    if (state.lastInsertedExerciseId) {
+      activeJob.exerciseIds.push(state.lastInsertedExerciseId);
+    }
+    return [];
+  }
+
+  if ('failedCount' in values && !('status' in values)) {
+    activeJob.failedCount += 1;
+    return [];
+  }
+
+  if (values.status === 'completed' || values.status === 'failed') {
+    activeJob.status = values.status;
+    activeJob.errorMessage = (values.errorMessage as string | null | undefined) ?? null;
+    activeJob.completedAt = values.completedAt as Date ?? null;
+
+    if (typeof values.generatedCount === 'number') {
+      activeJob.generatedCount = values.generatedCount;
+    }
+
+    if (typeof values.failedCount === 'number') {
+      activeJob.failedCount = values.failedCount;
+    }
+
+    if (Array.isArray(values.exerciseIds)) {
+      activeJob.exerciseIds = [...values.exerciseIds];
+    }
+  }
+
+  return [];
+}
 
 function createMockTransactionClient() {
   return {
@@ -89,49 +202,35 @@ const mockDb = {
     }
   }),
   update: vi.fn(() => ({
-    set: vi.fn((values: { status?: JobState['status']; errorMessage?: string; completedAt?: Date }) => ({
-      where: vi.fn(() => ({
-        returning: vi.fn(async () => {
-          if (values.errorMessage === 'WORKER_INTERRUPTED') {
-            const now = new Date('2026-03-05T18:00:00.000Z');
-            const stalePendingBefore = new Date(now.getTime() - 10 * 60 * 1000);
-            const staleProcessingBefore = new Date(now.getTime() - 20 * 60 * 1000);
+    set: vi.fn((values: Record<string, unknown>) => ({
+      where: vi.fn(() => {
+        const rows = applyJobUpdate(values);
 
-            const matching = state.jobs.filter((job) => {
-              if (state.recoverPhase === 0) {
-                return job.status === 'pending' && job.createdAt < stalePendingBefore;
-              }
+        return {
+          returning: vi.fn(async () => rows),
+        };
+      }),
+    })),
+  })),
+  select: vi.fn(() => ({
+    from: vi.fn(() => ({
+      where: vi.fn(async () => state.chunkRows.map(row => ({
+        id: row.id,
+        documentId: row.documentId,
+        position: row.position,
+      }))),
+    })),
+  })),
+  insert: vi.fn(() => ({
+    values: vi.fn((values: Record<string, unknown>) => ({
+      returning: vi.fn(async () => {
+        const id = `exercise-${state.nextExerciseId}`;
+        state.nextExerciseId += 1;
+        state.lastInsertedExerciseId = id;
+        state.insertedExercises.push({ id, values });
 
-              if (job.status !== 'processing') {
-                return false;
-              }
-
-              const baseline = job.startedAt ?? job.createdAt;
-              return baseline < staleProcessingBefore;
-            });
-
-            for (const job of matching) {
-              job.status = 'failed';
-              job.errorMessage = 'WORKER_INTERRUPTED';
-              job.completedAt = now;
-            }
-
-            state.recoverPhase += 1;
-            return matching.map(job => ({ id: job.id }));
-          }
-
-          if (values.errorMessage === 'NO_CONTENT') {
-            const processingJob = state.jobs.find(job => job.status === 'processing');
-            if (processingJob) {
-              processingJob.status = 'failed';
-              processingJob.errorMessage = 'NO_CONTENT';
-              processingJob.completedAt = values.completedAt ?? new Date('2026-03-05T18:00:00.000Z');
-            }
-          }
-
-          return [];
-        }),
-      })),
+        return [{ id }];
+      }),
     })),
   })),
 };
@@ -141,23 +240,23 @@ vi.mock('./DB', () => ({
 }));
 
 vi.mock('./Mistral', () => ({
-  createEmbeddings: vi.fn(async () => ({ embeddings: [[0.1]], usage: { promptTokens: 1, totalTokens: 1 } })),
-  createStructuredChatCompletion: vi.fn(),
-  createJsonChatCompletion: vi.fn(),
+  createEmbeddings: mockCreateEmbeddings,
+  createStructuredChatCompletion: mockCreateStructuredChatCompletion,
+  createJsonChatCompletion: mockCreateJsonChatCompletion,
 }));
 
 vi.mock('./Pinecone', () => ({
   getNamespacedIndex: () => ({
-    query: vi.fn(async () => ({ matches: [] })),
+    query: mockPineconeQuery,
   }),
 }));
 
 vi.mock('./Logger', () => ({
   logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
+    info: loggerInfoMock,
+    warn: loggerWarnMock,
+    error: loggerErrorMock,
+    debug: loggerDebugMock,
   },
 }));
 
@@ -189,12 +288,43 @@ function createJob(input: Partial<JobState> & { id: string; createdAt: Date }): 
   };
 }
 
+function setReadyChunks(input?: {
+  documentId?: string;
+  texts?: string[];
+}) {
+  const documentId = input?.documentId ?? '550e8400-e29b-41d4-a716-446655440010';
+  const texts = input?.texts ?? ['Va subito a casa.'];
+
+  state.chunkRows = texts.map((_, index) => ({
+    id: `chunk-${index + 1}`,
+    documentId,
+    position: index,
+  }));
+  state.pineconeMatches = texts.map((text, index) => ({
+    metadata: {
+      document_id: documentId,
+      chunk_position: index,
+      text,
+    },
+  }));
+}
+
 describe('runGenerationWorkerBatch', () => {
   beforeEach(() => {
     state.jobs = [];
     state.recoverPhase = 0;
     state.txSelectedId = null;
+    state.chunkRows = [];
+    state.pineconeMatches = [];
+    state.insertedExercises = [];
+    state.nextExerciseId = 1;
+    state.lastInsertedExerciseId = null;
     txLock = Promise.resolve();
+
+    mockCreateStructuredChatCompletion.mockReset();
+    mockCreateJsonChatCompletion.mockReset();
+    mockCreateEmbeddings.mockClear();
+    mockPineconeQuery.mockClear();
     vi.clearAllMocks();
   });
 
@@ -273,5 +403,294 @@ describe('runGenerationWorkerBatch', () => {
     expect(first.claimed).toBe(1);
     expect(second.claimed).toBe(1);
     expect(state.jobs.filter(job => job.status === 'pending')).toHaveLength(0);
+  });
+
+  it('logs schema mismatch when fallback JSON omits nested exerciseData', async () => {
+    state.jobs = [
+      createJob({
+        id: 'job-invalid-flat',
+        requestedCount: 1,
+        createdAt: new Date('2026-03-05T17:59:00.000Z'),
+      }),
+    ];
+    setReadyChunks();
+
+    mockCreateStructuredChatCompletion.mockRejectedValue(new Error('Mistral structured output parsing failed'));
+    mockCreateJsonChatCompletion.mockResolvedValue(JSON.stringify({
+      exercises: [{
+        type: 'multiple_choice',
+        question: 'Quale forma e corretta?',
+        options: ['vai', 'vada', 'andiamo', 'vanno'],
+        correctIndex: 0,
+        sourceReferences: [{
+          documentId: '550e8400-e29b-41d4-a716-446655440010',
+          chunkPosition: 0,
+        }],
+      }],
+    }));
+
+    const { runGenerationWorkerBatch } = await import('./ExerciseGeneration');
+    const result = await runGenerationWorkerBatch({ maxJobs: 1 });
+
+    expect(result.failed).toBe(1);
+    expect(state.jobs[0]?.status).toBe('failed');
+    expect(state.jobs[0]?.errorMessage).toBe('GENERATION_FAILED');
+    expect(state.jobs[0]?.failedCount).toBe(1);
+    expect(loggerWarnMock.mock.calls).toEqual(expect.arrayContaining([
+      [
+        'exercise_generation_structured_failed',
+        expect.objectContaining({
+          jobId: 'job-invalid-flat',
+          attempt: 1,
+          failureKind: 'unparsable_response',
+          errorMessage: 'Mistral structured output parsing failed',
+        }),
+      ],
+      [
+        'exercise_generation_json_validation_failed',
+        expect.objectContaining({
+          jobId: 'job-invalid-flat',
+          attempt: 1,
+          rawContentExcerpt: expect.stringContaining('"options"'),
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              path: 'exercises.0.exerciseData',
+            }),
+          ]),
+        }),
+      ],
+    ]));
+  });
+
+  it('completes a job when the model returns nested exerciseData', async () => {
+    state.jobs = [
+      createJob({
+        id: 'job-valid-nested',
+        requestedCount: 1,
+        createdAt: new Date('2026-03-05T17:59:00.000Z'),
+      }),
+    ];
+    setReadyChunks();
+
+    mockCreateStructuredChatCompletion.mockResolvedValue({
+      parsed: {
+        exercises: [{
+          type: 'multiple_choice',
+          question: 'Quale forma e corretta?',
+          sourceReferences: [{
+            documentId: '550e8400-e29b-41d4-a716-446655440010',
+            chunkPosition: 0,
+          }],
+          exerciseData: {
+            options: ['vai', 'vada', 'andiamo', 'vanno'],
+            correctIndex: 0,
+          },
+        }],
+      },
+      rawContent: null,
+      usage: { promptTokens: 1, totalTokens: 1 },
+    });
+
+    const { runGenerationWorkerBatch } = await import('./ExerciseGeneration');
+    const result = await runGenerationWorkerBatch({ maxJobs: 1 });
+
+    expect(result.completed).toBe(1);
+    expect(state.jobs[0]?.status).toBe('completed');
+    expect(state.jobs[0]?.generatedCount).toBe(1);
+    expect(state.jobs[0]?.failedCount).toBe(0);
+    expect(state.jobs[0]?.exerciseIds).toEqual(['exercise-1']);
+    expect(state.insertedExercises).toHaveLength(1);
+    expect(mockCreateJsonChatCompletion).not.toHaveBeenCalled();
+  });
+
+  it('marks every exercise attempt failed when invalid fallback output repeats', async () => {
+    state.jobs = [
+      createJob({
+        id: 'job-repeated-invalid',
+        requestedCount: 2,
+        createdAt: new Date('2026-03-05T17:59:00.000Z'),
+      }),
+    ];
+    setReadyChunks();
+
+    mockCreateStructuredChatCompletion.mockRejectedValue(new Error('Mistral structured output parsing failed'));
+    mockCreateJsonChatCompletion.mockResolvedValue(JSON.stringify({
+      exercises: [{
+        type: 'multiple_choice',
+        question: 'Quale forma e corretta?',
+        options: ['vai', 'vada', 'andiamo', 'vanno'],
+        correctIndex: 0,
+        sourceReferences: [{
+          documentId: '550e8400-e29b-41d4-a716-446655440010',
+          chunkPosition: 0,
+        }],
+      }],
+    }));
+
+    const { runGenerationWorkerBatch } = await import('./ExerciseGeneration');
+    const result = await runGenerationWorkerBatch({ maxJobs: 1 });
+
+    expect(result.failed).toBe(1);
+    expect(state.jobs[0]?.status).toBe('failed');
+    expect(state.jobs[0]?.errorMessage).toBe('GENERATION_FAILED');
+    expect(state.jobs[0]?.generatedCount).toBe(0);
+    expect(state.jobs[0]?.failedCount).toBe(2);
+    expect(mockCreateJsonChatCompletion).toHaveBeenCalledTimes(6);
+  });
+
+  it('retries duplicate generated questions within one job until the question changes', async () => {
+    state.jobs = [
+      createJob({
+        id: 'job-duplicate-question-retry',
+        requestedCount: 2,
+        createdAt: new Date('2026-03-05T17:59:00.000Z'),
+      }),
+    ];
+    setReadyChunks({
+      texts: [
+        'Va subito a casa.',
+        'Prendi il quaderno.',
+        'Scrivi la risposta.',
+      ],
+    });
+
+    mockCreateStructuredChatCompletion
+      .mockResolvedValueOnce({
+        parsed: {
+          exercises: [{
+            type: 'multiple_choice',
+            question: 'Quale forma e corretta?',
+            sourceReferences: [{
+              documentId: '550e8400-e29b-41d4-a716-446655440010',
+              chunkPosition: 0,
+            }],
+            exerciseData: {
+              options: ['vai', 'vada', 'andiamo', 'vanno'],
+              correctIndex: 0,
+            },
+          }],
+        },
+        rawContent: null,
+        usage: { promptTokens: 1, totalTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        parsed: {
+          exercises: [{
+            type: 'multiple_choice',
+            question: 'Quale forma e corretta?',
+            sourceReferences: [{
+              documentId: '550e8400-e29b-41d4-a716-446655440010',
+              chunkPosition: 1,
+            }],
+            exerciseData: {
+              options: ['prendi', 'prenda', 'prendete', 'prendono'],
+              correctIndex: 0,
+            },
+          }],
+        },
+        rawContent: null,
+        usage: { promptTokens: 1, totalTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        parsed: {
+          exercises: [{
+            type: 'multiple_choice',
+            question: 'Quale forma imperativa usa il verbo prendere per tu?',
+            sourceReferences: [{
+              documentId: '550e8400-e29b-41d4-a716-446655440010',
+              chunkPosition: 1,
+            }],
+            exerciseData: {
+              options: ['prendi', 'prenda', 'prendete', 'prendono'],
+              correctIndex: 0,
+            },
+          }],
+        },
+        rawContent: null,
+        usage: { promptTokens: 1, totalTokens: 1 },
+      });
+
+    const { runGenerationWorkerBatch } = await import('./ExerciseGeneration');
+    const result = await runGenerationWorkerBatch({ maxJobs: 1 });
+
+    expect(result.completed).toBe(1);
+    expect(state.jobs[0]?.status).toBe('completed');
+    expect(state.jobs[0]?.generatedCount).toBe(2);
+    expect(state.insertedExercises).toHaveLength(2);
+    expect(state.insertedExercises.map(item => item.values.question)).toEqual([
+      'Quale forma e corretta?',
+      'Quale forma imperativa usa il verbo prendere per tu?',
+    ]);
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      'exercise_generation_attempt_failed',
+      expect.objectContaining({
+        jobId: 'job-duplicate-question-retry',
+        attempt: 1,
+        error: expect.any(Error),
+      }),
+    );
+  });
+
+  it('completes with distinct questions even when excerpts overlap', async () => {
+    state.jobs = [
+      createJob({
+        id: 'job-overlap-success',
+        requestedCount: 2,
+        createdAt: new Date('2026-03-05T17:59:00.000Z'),
+      }),
+    ];
+    setReadyChunks({
+      texts: [
+        'Va subito a casa.',
+        'Prendi il quaderno.',
+      ],
+    });
+
+    mockCreateStructuredChatCompletion
+      .mockResolvedValueOnce({
+        parsed: {
+          exercises: [{
+            type: 'multiple_choice',
+            question: 'Qual e la forma corretta di andare per tu?',
+            sourceReferences: [{
+              documentId: '550e8400-e29b-41d4-a716-446655440010',
+              chunkPosition: 0,
+            }],
+            exerciseData: {
+              options: ['vai', 'vada', 'andiamo', 'vanno'],
+              correctIndex: 0,
+            },
+          }],
+        },
+        rawContent: null,
+        usage: { promptTokens: 1, totalTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        parsed: {
+          exercises: [{
+            type: 'multiple_choice',
+            question: 'Qual e la forma corretta di prendere per tu?',
+            sourceReferences: [{
+              documentId: '550e8400-e29b-41d4-a716-446655440010',
+              chunkPosition: 1,
+            }],
+            exerciseData: {
+              options: ['prendi', 'prenda', 'prendete', 'prendono'],
+              correctIndex: 0,
+            },
+          }],
+        },
+        rawContent: null,
+        usage: { promptTokens: 1, totalTokens: 1 },
+      });
+
+    const { runGenerationWorkerBatch } = await import('./ExerciseGeneration');
+    const result = await runGenerationWorkerBatch({ maxJobs: 1 });
+
+    expect(result.completed).toBe(1);
+    expect(state.jobs[0]?.status).toBe('completed');
+    expect(state.jobs[0]?.generatedCount).toBe(2);
+    expect(state.jobs[0]?.failedCount).toBe(0);
+    expect(state.insertedExercises).toHaveLength(2);
   });
 });
