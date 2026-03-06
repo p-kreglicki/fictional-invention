@@ -151,33 +151,38 @@ function getAnswerPayload(input: {
 
 function renderRubric(props: {
   response: ExerciseLatestResponse;
-  t: ReturnType<typeof useTranslations>;
+  labels: {
+    accuracy: string;
+    grammar: string;
+    fluency: string;
+    bonus: string;
+  };
 }) {
   return (
     <dl className="grid grid-cols-2 gap-2 text-xs text-gray-600 sm:grid-cols-4">
       <div className="rounded-md bg-gray-50 p-2">
-        <dt>{props.t('rubric_accuracy')}</dt>
+        <dt>{props.labels.accuracy}</dt>
         <dd className="mt-1 font-semibold text-gray-900">
           {props.response.rubric.accuracy}
           /40
         </dd>
       </div>
       <div className="rounded-md bg-gray-50 p-2">
-        <dt>{props.t('rubric_grammar')}</dt>
+        <dt>{props.labels.grammar}</dt>
         <dd className="mt-1 font-semibold text-gray-900">
           {props.response.rubric.grammar}
           /30
         </dd>
       </div>
       <div className="rounded-md bg-gray-50 p-2">
-        <dt>{props.t('rubric_fluency')}</dt>
+        <dt>{props.labels.fluency}</dt>
         <dd className="mt-1 font-semibold text-gray-900">
           {props.response.rubric.fluency}
           /20
         </dd>
       </div>
       <div className="rounded-md bg-gray-50 p-2">
-        <dt>{props.t('rubric_bonus')}</dt>
+        <dt>{props.labels.bonus}</dt>
         <dd className="mt-1 font-semibold text-gray-900">
           {props.response.rubric.bonus}
           /10
@@ -191,6 +196,12 @@ export { type ExerciseCardItem };
 
 export function ExerciseCards(props: ExerciseCardsProps) {
   const t = useTranslations('DashboardExercisesPage');
+  const rubricLabels = {
+    accuracy: t('rubric_accuracy'),
+    grammar: t('rubric_grammar'),
+    fluency: t('rubric_fluency'),
+    bonus: t('rubric_bonus'),
+  };
   const [answersByExerciseId, setAnswersByExerciseId] = useState<Record<string, string>>({});
   const [submissionStateByExerciseId, setSubmissionStateByExerciseId] = useState<Record<string, SubmissionState>>({});
   const isMountedRef = useRef(true);
@@ -487,7 +498,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                   <div className="mt-3">
                     {renderRubric({
                       response: exercise.latestResponse,
-                      t,
+                      labels: rubricLabels,
                     })}
                   </div>
 
