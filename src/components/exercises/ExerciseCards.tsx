@@ -385,22 +385,29 @@ export function ExerciseCards(props: ExerciseCardsProps) {
       <div className="grid gap-4 md:grid-cols-2">
         {props.exercises.map((exercise) => {
           const submissionState = submissionStateByExerciseId[exercise.id];
+          const exerciseTypeLabel = exercise.type === 'multiple_choice'
+            ? null
+            : getExerciseTypeLabel({ exercise, t });
           const difficultyLabel = getDifficultyLabel({
             difficulty: exercise.difficulty,
             t,
           });
+          const metadataLabels = [exerciseTypeLabel, difficultyLabel].filter(
+            (label): label is string => label !== null,
+          );
 
           return (
             <article key={exercise.id} className="rounded-md border border-gray-200 bg-white p-4">
-              <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-gray-500 uppercase">
-                <span>{getExerciseTypeLabel({ exercise, t })}</span>
-                {difficultyLabel && (
-                  <>
-                    <span aria-hidden="true">•</span>
-                    <span>{difficultyLabel}</span>
-                  </>
-                )}
-              </div>
+              {metadataLabels.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-gray-500 uppercase">
+                  {metadataLabels.map((label, index) => (
+                    <span key={`${exercise.id}-${label}`}>
+                      {index > 0 && <span aria-hidden="true" className="mr-2">•</span>}
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <h3 className="mt-2 text-sm font-semibold text-gray-900">{exercise.question}</h3>
 
@@ -414,14 +421,15 @@ export function ExerciseCards(props: ExerciseCardsProps) {
               )}
 
               {exercise.type === 'multiple_choice' && (
-                <fieldset className="mt-3 space-y-2">
-                  <legend className="text-sm text-gray-700">{t('answer_input_label')}</legend>
+                <fieldset className="mt-3 space-y-3">
+                  <legend className="text-sm text-gray-700">{t('choose_correct_answer_label')}</legend>
                   {exercise.renderData.options.map((option, index) => (
                     <label
                       key={`${exercise.id}-${index}-${option}`}
-                      className="flex items-start gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700"
+                      className="flex cursor-pointer items-center gap-3 py-1 text-sm text-gray-700"
                     >
                       <input
+                        className="h-4 w-4 shrink-0 border-gray-300 text-gray-900"
                         type="radio"
                         name={`exercise-${exercise.id}`}
                         value={String(index)}
@@ -503,21 +511,6 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                   </div>
                 </div>
               )}
-
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600">
-                <span>
-                  {t('attempts_label')}
-                  :
-                  {' '}
-                  {exercise.timesAttempted}
-                </span>
-                <span>
-                  {t('average_score_label')}
-                  :
-                  {' '}
-                  {exercise.averageScore ?? '—'}
-                </span>
-              </div>
 
               <div className="mt-4 flex items-center gap-3">
                 <button

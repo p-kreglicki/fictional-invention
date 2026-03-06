@@ -104,12 +104,15 @@ describe('ExerciseCards', () => {
 
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
+    await expect.element(page.getByText('Choose correct answer')).toBeInTheDocument();
+    await expect.element(page.getByText('Single choice')).not.toBeInTheDocument();
     await page.getByRole('radio').nth(0).click();
     await page.getByRole('button', { name: 'Submit answer' }).click();
 
     await expect.element(page.getByText('Latest feedback')).toBeInTheDocument();
     await expect.element(page.getByText('Score: 100/100')).toBeInTheDocument();
-    await expect.element(page.getByText('Attempts: 1')).toBeInTheDocument();
+    await expect.element(page.getByText('Attempts')).not.toBeInTheDocument();
+    await expect.element(page.getByText('Average score')).not.toBeInTheDocument();
   });
 
   it('renders duplicate multiple-choice labels without emitting a key warning', async () => {
