@@ -101,7 +101,12 @@ export const documentsSchema = pgTable('documents', {
   errorMessage: text('error_message'),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
   processedAt: timestamp('processed_at', { mode: 'date' }),
-});
+}, table => ({
+  documentsUserCreatedIdx: index('documents_user_created_idx').on(
+    table.userId,
+    table.createdAt.desc(),
+  ),
+}));
 
 // Chunks table (document segments with embeddings)
 export const chunksSchema = pgTable('chunks', {
@@ -112,7 +117,9 @@ export const chunksSchema = pgTable('chunks', {
   tokenCount: integer('token_count').notNull(),
   pineconeId: text('pinecone_id').notNull().unique(),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-});
+}, table => ({
+  chunksDocumentIdx: index('chunks_document_id_idx').on(table.documentId),
+}));
 
 // Exercises table (generated exercises)
 export const exercisesSchema = pgTable('exercises', {
