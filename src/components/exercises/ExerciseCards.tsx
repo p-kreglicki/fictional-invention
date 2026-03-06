@@ -418,7 +418,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                   <legend className="text-sm text-gray-700">{t('answer_input_label')}</legend>
                   {exercise.renderData.options.map((option, index) => (
                     <label
-                      key={`${exercise.id}-${option}`}
+                      key={`${exercise.id}-${index}-${option}`}
                       className="flex items-start gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700"
                     >
                       <input

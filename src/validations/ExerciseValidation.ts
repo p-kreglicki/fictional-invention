@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { validateUniqueStrings } from '@/validations/UniqueStringValidation';
 
 const exerciseTypeValues = ['multiple_choice', 'fill_gap', 'single_answer'] as const;
 const difficultyValues = ['beginner', 'intermediate', 'advanced'] as const;
@@ -57,6 +58,16 @@ const GeneratedMultipleChoiceExerciseSchema = BaseGeneratedExerciseSchema.extend
     correctIndex: z.number().int().min(0).max(3),
     explanation: z.string().min(1).optional(),
   }),
+}).superRefine((value, context) => {
+  validateUniqueStrings(value.exerciseData.options, context, 'exerciseData.options');
+
+  if ((value.question.match(/___/g) ?? []).length !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'question must contain exactly one ___ placeholder',
+      path: ['question'],
+    });
+  }
 });
 
 const GeneratedFillGapExerciseSchema = BaseGeneratedExerciseSchema.extend({
@@ -66,11 +77,14 @@ const GeneratedFillGapExerciseSchema = BaseGeneratedExerciseSchema.extend({
     acceptedAnswers: z.array(z.string().min(1)).min(1).max(5).optional(),
     hint: z.string().min(1).optional(),
   }),
-}).refine((value) => {
-  return (value.question.match(/___/g) ?? []).length === 1;
-}, {
-  message: 'question must contain exactly one ___ placeholder',
-  path: ['question'],
+}).superRefine((value, context) => {
+  if ((value.question.match(/___/g) ?? []).length !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'question must contain exactly one ___ placeholder',
+      path: ['question'],
+    });
+  }
 });
 
 const GeneratedSingleAnswerExerciseSchema = BaseGeneratedExerciseSchema.extend({

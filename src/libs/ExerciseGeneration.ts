@@ -156,6 +156,42 @@ function normalizeGeneratedQuestion(question: string) {
     .toLocaleLowerCase('it-IT');
 }
 
+function prepareGeneratedExerciseForInsert(
+  exercise: GeneratedExercise,
+  random: () => number = Math.random,
+): GeneratedExercise {
+  if (exercise.type !== 'multiple_choice') {
+    return exercise;
+  }
+
+  const shuffledOptions = exercise.exerciseData.options.map((option, index) => ({
+    option,
+    isCorrect: index === exercise.exerciseData.correctIndex,
+  }));
+
+  for (let index = shuffledOptions.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    const current = shuffledOptions[index];
+    const next = shuffledOptions[swapIndex];
+
+    if (!current || !next) {
+      continue;
+    }
+
+    shuffledOptions[index] = next;
+    shuffledOptions[swapIndex] = current;
+  }
+
+  return {
+    ...exercise,
+    exerciseData: {
+      ...exercise.exerciseData,
+      options: shuffledOptions.map(item => item.option),
+      correctIndex: shuffledOptions.findIndex(item => item.isCorrect),
+    },
+  };
+}
+
 function selectCandidateSubset(
   candidates: GenerationCandidate[],
   exerciseIndex: number,
@@ -324,14 +360,16 @@ async function insertGeneratedExercise(input: {
   chunkIds: string[];
   documentIds: string[];
 }) {
+  const generatedExercise = prepareGeneratedExerciseForInsert(input.generated);
+
   const [exercise] = await db
     .insert(exercisesSchema)
     .values({
       userId: input.userId,
-      type: input.generated.type,
+      type: generatedExercise.type,
       difficulty: input.difficulty ?? null,
-      question: input.generated.question,
-      exerciseData: input.generated.exerciseData,
+      question: generatedExercise.question,
+      exerciseData: generatedExercise.exerciseData,
       sourceChunkIds: input.chunkIds,
       sourceDocumentIds: input.documentIds,
       grammarFocus: input.topicFocus ?? null,

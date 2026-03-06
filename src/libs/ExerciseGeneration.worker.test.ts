@@ -419,7 +419,7 @@ describe('runGenerationWorkerBatch', () => {
     mockCreateJsonChatCompletion.mockResolvedValue(JSON.stringify({
       exercises: [{
         type: 'multiple_choice',
-        question: 'Quale forma e corretta?',
+        question: 'Completa: Tu ___ subito a casa.',
         options: ['vai', 'vada', 'andiamo', 'vanno'],
         correctIndex: 0,
         sourceReferences: [{
@@ -476,7 +476,7 @@ describe('runGenerationWorkerBatch', () => {
       parsed: {
         exercises: [{
           type: 'multiple_choice',
-          question: 'Quale forma e corretta?',
+          question: 'Completa: Tu ___ subito a casa.',
           sourceReferences: [{
             documentId: '550e8400-e29b-41d4-a716-446655440010',
             chunkPosition: 0,
@@ -503,6 +503,52 @@ describe('runGenerationWorkerBatch', () => {
     expect(mockCreateJsonChatCompletion).not.toHaveBeenCalled();
   });
 
+  it('shuffles multiple-choice options before persisting the exercise', async () => {
+    state.jobs = [
+      createJob({
+        id: 'job-shuffled-options',
+        requestedCount: 1,
+        createdAt: new Date('2026-03-05T17:59:00.000Z'),
+      }),
+    ];
+    setReadyChunks();
+
+    const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => 0);
+
+    try {
+      mockCreateStructuredChatCompletion.mockResolvedValue({
+        parsed: {
+          exercises: [{
+            type: 'multiple_choice',
+            question: 'Completa: Tu ___ subito a casa.',
+            sourceReferences: [{
+              documentId: '550e8400-e29b-41d4-a716-446655440010',
+              chunkPosition: 0,
+            }],
+            exerciseData: {
+              options: ['vai', 'vada', 'andiamo', 'vanno'],
+              correctIndex: 0,
+            },
+          }],
+        },
+        rawContent: null,
+        usage: { promptTokens: 1, totalTokens: 1 },
+      });
+
+      const { runGenerationWorkerBatch } = await import('./ExerciseGeneration');
+      const result = await runGenerationWorkerBatch({ maxJobs: 1 });
+
+      expect(result.completed).toBe(1);
+      expect(state.insertedExercises).toHaveLength(1);
+      expect(state.insertedExercises[0]?.values.exerciseData).toEqual({
+        options: ['vada', 'andiamo', 'vanno', 'vai'],
+        correctIndex: 3,
+      });
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it('marks every exercise attempt failed when invalid fallback output repeats', async () => {
     state.jobs = [
       createJob({
@@ -517,7 +563,7 @@ describe('runGenerationWorkerBatch', () => {
     mockCreateJsonChatCompletion.mockResolvedValue(JSON.stringify({
       exercises: [{
         type: 'multiple_choice',
-        question: 'Quale forma e corretta?',
+        question: 'Completa: Tu ___ subito a casa.',
         options: ['vai', 'vada', 'andiamo', 'vanno'],
         correctIndex: 0,
         sourceReferences: [{
@@ -536,6 +582,80 @@ describe('runGenerationWorkerBatch', () => {
     expect(state.jobs[0]?.generatedCount).toBe(0);
     expect(state.jobs[0]?.failedCount).toBe(2);
     expect(mockCreateJsonChatCompletion).toHaveBeenCalledTimes(6);
+  });
+
+  it('accepts topic-guided fill-gap exercises supported by multiple references', async () => {
+    state.jobs = [
+      createJob({
+        id: 'job-topic-guided-fill-gap',
+        requestedCount: 1,
+        createdAt: new Date('2026-03-05T17:59:00.000Z'),
+        exerciseType: 'fill_gap',
+      }),
+    ];
+    state.chunkRows = [
+      {
+        id: 'chunk-1',
+        documentId: '550e8400-e29b-41d4-a716-446655440010',
+        position: 0,
+      },
+      {
+        id: 'chunk-2',
+        documentId: '550e8400-e29b-41d4-a716-446655440011',
+        position: 1,
+      },
+    ];
+    state.pineconeMatches = [
+      {
+        metadata: {
+          document_id: '550e8400-e29b-41d4-a716-446655440010',
+          chunk_position: 0,
+          text: 'Al mio paese vivevo con la mia famiglia.',
+        },
+      },
+      {
+        metadata: {
+          document_id: '550e8400-e29b-41d4-a716-446655440011',
+          chunk_position: 1,
+          text: 'La nostra casa era vicina al mare.',
+        },
+      },
+    ];
+
+    mockCreateStructuredChatCompletion.mockResolvedValue({
+      parsed: {
+        exercises: [{
+          type: 'fill_gap',
+          question: 'Completa: Al mio paese io ___ con la mia famiglia in una casa vicina al mare.',
+          sourceReferences: [{
+            documentId: '550e8400-e29b-41d4-a716-446655440010',
+            chunkPosition: 0,
+          }, {
+            documentId: '550e8400-e29b-41d4-a716-446655440011',
+            chunkPosition: 1,
+          }],
+          exerciseData: {
+            answer: 'vivevo',
+            hint: 'Usa l imperfetto indicativo.',
+          },
+        }],
+      },
+      rawContent: null,
+      usage: { promptTokens: 1, totalTokens: 1 },
+    });
+
+    const { runGenerationWorkerBatch } = await import('./ExerciseGeneration');
+    const result = await runGenerationWorkerBatch({ maxJobs: 1 });
+
+    expect(result.completed).toBe(1);
+    expect(state.jobs[0]?.status).toBe('completed');
+    expect(state.jobs[0]?.generatedCount).toBe(1);
+    expect(state.jobs[0]?.failedCount).toBe(0);
+    expect(state.insertedExercises).toHaveLength(1);
+    expect(state.insertedExercises[0]?.values.exerciseData).toEqual({
+      answer: 'vivevo',
+      hint: 'Usa l imperfetto indicativo.',
+    });
   });
 
   it('retries duplicate generated questions within one job until the question changes', async () => {
@@ -559,7 +679,7 @@ describe('runGenerationWorkerBatch', () => {
         parsed: {
           exercises: [{
             type: 'multiple_choice',
-            question: 'Quale forma e corretta?',
+            question: 'Completa: Tu ___ subito a casa.',
             sourceReferences: [{
               documentId: '550e8400-e29b-41d4-a716-446655440010',
               chunkPosition: 0,
@@ -577,7 +697,7 @@ describe('runGenerationWorkerBatch', () => {
         parsed: {
           exercises: [{
             type: 'multiple_choice',
-            question: 'Quale forma e corretta?',
+            question: 'Completa: Tu ___ subito a casa.',
             sourceReferences: [{
               documentId: '550e8400-e29b-41d4-a716-446655440010',
               chunkPosition: 1,
@@ -595,7 +715,7 @@ describe('runGenerationWorkerBatch', () => {
         parsed: {
           exercises: [{
             type: 'multiple_choice',
-            question: 'Quale forma imperativa usa il verbo prendere per tu?',
+            question: 'Completa: Tu ___ il quaderno adesso.',
             sourceReferences: [{
               documentId: '550e8400-e29b-41d4-a716-446655440010',
               chunkPosition: 1,
@@ -618,8 +738,8 @@ describe('runGenerationWorkerBatch', () => {
     expect(state.jobs[0]?.generatedCount).toBe(2);
     expect(state.insertedExercises).toHaveLength(2);
     expect(state.insertedExercises.map(item => item.values.question)).toEqual([
-      'Quale forma e corretta?',
-      'Quale forma imperativa usa il verbo prendere per tu?',
+      'Completa: Tu ___ subito a casa.',
+      'Completa: Tu ___ il quaderno adesso.',
     ]);
     expect(loggerWarnMock).toHaveBeenCalledWith(
       'exercise_generation_attempt_failed',
@@ -651,7 +771,7 @@ describe('runGenerationWorkerBatch', () => {
         parsed: {
           exercises: [{
             type: 'multiple_choice',
-            question: 'Qual e la forma corretta di andare per tu?',
+            question: 'Completa: Tu ___ subito a casa.',
             sourceReferences: [{
               documentId: '550e8400-e29b-41d4-a716-446655440010',
               chunkPosition: 0,
@@ -669,7 +789,7 @@ describe('runGenerationWorkerBatch', () => {
         parsed: {
           exercises: [{
             type: 'multiple_choice',
-            question: 'Qual e la forma corretta di prendere per tu?',
+            question: 'Completa: Tu ___ il quaderno.',
             sourceReferences: [{
               documentId: '550e8400-e29b-41d4-a716-446655440010',
               chunkPosition: 1,

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { getGenerationJobWithExercises } from '@/libs/ExerciseGeneration';
-import { toExerciseCard } from '@/libs/ExercisePresenter';
+import { safeToExerciseCard } from '@/libs/ExercisePresenter';
 import { logger } from '@/libs/Logger';
 
 export const runtime = 'nodejs';
@@ -32,6 +32,20 @@ export async function GET(_request: Request, props: RouteParams) {
         { status: 404 },
       );
     }
+    const exercises = result.exercises.flatMap((exercise) => {
+      const card = safeToExerciseCard({ exercise });
+
+      if (!card.success) {
+        logger.warn('exercise_card_serialization_failed', {
+          exerciseId: exercise.id,
+          error: card.error,
+          jobId: result.job.id,
+        });
+        return [];
+      }
+
+      return [card.data];
+    });
 
     return NextResponse.json({
       id: result.job.id,
@@ -43,7 +57,7 @@ export async function GET(_request: Request, props: RouteParams) {
       createdAt: result.job.createdAt.toISOString(),
       startedAt: result.job.startedAt?.toISOString() ?? null,
       completedAt: result.job.completedAt?.toISOString() ?? null,
-      exercises: result.exercises.map(exercise => toExerciseCard({ exercise })),
+      exercises,
     });
   } catch (error) {
     logger.error('Failed to get generation job', { error });

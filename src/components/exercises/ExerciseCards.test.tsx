@@ -8,7 +8,7 @@ import { page } from 'vitest/browser';
 import messages from '@/locales/en.json';
 import { ExerciseCards } from './ExerciseCards';
 
-function createExercise(): ExerciseCardItem {
+function createExercise(): Extract<ExerciseCardItem, { type: 'multiple_choice' }> {
   return {
     id: '550e8400-e29b-41d4-a716-446655440010',
     type: 'multiple_choice',
@@ -110,6 +110,27 @@ describe('ExerciseCards', () => {
     await expect.element(page.getByText('Latest feedback')).toBeInTheDocument();
     await expect.element(page.getByText('Score: 100/100')).toBeInTheDocument();
     await expect.element(page.getByText('Attempts: 1')).toBeInTheDocument();
+  });
+
+  it('renders duplicate multiple-choice labels without emitting a key warning', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await render(
+      <ExerciseCardsHarness exercise={{
+        ...createExercise(),
+        renderData: {
+          options: ['andava', 'andava', 'andranno', 'andrei'],
+        },
+      }}
+      />,
+    );
+
+    await expect.element(page.getByRole('radio').nth(0)).toBeInTheDocument();
+    await expect.element(page.getByRole('radio').nth(1)).toBeInTheDocument();
+
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Encountered two children with the same key'),
+    );
   });
 
   it('keeps the submit button locked while a request is in flight', async () => {
