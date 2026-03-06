@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { EvaluationRubricSchema } from '@/validations/EvaluationSchemas';
 
 const difficultyValues = ['beginner', 'intermediate', 'advanced'] as const;
 const evaluationMethodValues = ['deterministic', 'llm'] as const;
@@ -14,13 +15,6 @@ export const SubmitResponseRequestSchema = z.object({
   answer: z.union([TextAnswerSchema, MultipleChoiceAnswerSchema]),
   responseTimeMs: z.number().int().nonnegative().optional(),
   clientSubmissionId: z.uuid(),
-});
-
-const EvaluationRubricSchema = z.object({
-  accuracy: z.number().int().min(0).max(40),
-  grammar: z.number().int().min(0).max(30),
-  fluency: z.number().int().min(0).max(20),
-  bonus: z.number().int().min(0).max(10),
 });
 
 export const EvaluationResultSchema = z.object({

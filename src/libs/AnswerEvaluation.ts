@@ -6,6 +6,7 @@ import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
 import { createStructuredChatCompletion } from '@/libs/Mistral';
 import { exercisesSchema } from '@/models/Schema';
+import { EvaluationRubricSchema } from '@/validations/EvaluationSchemas';
 import { EvaluationResultSchema } from '@/validations/ResponseValidation';
 import {
   buildEvaluationSystemPrompt,
@@ -16,12 +17,7 @@ import { parseStoredExercise } from './ExercisePresenter';
 
 const LlmEvaluationSchema = z.object({
   score: z.number().int().min(0).max(100),
-  rubric: z.object({
-    accuracy: z.number().int().min(0).max(40),
-    grammar: z.number().int().min(0).max(30),
-    fluency: z.number().int().min(0).max(20),
-    bonus: z.number().int().min(0).max(10),
-  }),
+  rubric: EvaluationRubricSchema,
   overallFeedback: z.string().trim().min(1).max(1000),
   suggestedReview: z.array(z.string().trim().min(1).max(120)).max(10),
   corrections: z.array(z.string().trim().min(1).max(200)).max(10).optional(),

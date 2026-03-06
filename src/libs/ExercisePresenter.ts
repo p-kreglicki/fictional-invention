@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { EvaluationRubricSchema } from '@/validations/EvaluationSchemas';
 import {
   ExerciseCardSchema,
   ExerciseLatestResponseSchema,
@@ -61,12 +62,7 @@ const StoredLatestResponseSchema = z.object({
   id: z.uuid(),
   exerciseId: z.uuid(),
   score: z.number().int().min(0).max(100),
-  rubric: z.object({
-    accuracy: z.number().int().min(0).max(40),
-    grammar: z.number().int().min(0).max(30),
-    fluency: z.number().int().min(0).max(20),
-    bonus: z.number().int().min(0).max(10),
-  }),
+  rubric: EvaluationRubricSchema,
   overallFeedback: z.string().trim().min(1),
   suggestedReview: z.array(z.string().trim().min(1)).max(10).nullable().optional(),
   responseTimeMs: z.number().int().nonnegative().nullable().optional(),
