@@ -8,6 +8,12 @@ const mockWithRule = vi.fn(() => ({
   protect: mockProtect,
 }));
 const mockFixedWindow = vi.fn(() => []);
+const mockEnv = {
+  ARCJET_KEY: 'ajkey_test' as string | undefined,
+  EXERCISE_RATE_LIMIT_MAX_REQUESTS: 20,
+  EXERCISE_RATE_LIMIT_WINDOW_SECONDS: 60,
+  NODE_ENV: 'test' as 'production' | 'test',
+};
 
 vi.mock('@/libs/Auth', () => ({
   requireUser: mockRequireUser,
@@ -29,11 +35,7 @@ vi.mock('@/libs/Arcjet', () => ({
 }));
 
 vi.mock('@/libs/Env', () => ({
-  Env: {
-    ARCJET_KEY: 'ajkey_test',
-    EXERCISE_RATE_LIMIT_MAX_REQUESTS: 20,
-    EXERCISE_RATE_LIMIT_WINDOW_SECONDS: 60,
-  },
+  Env: mockEnv,
 }));
 
 vi.mock('@/libs/Logger', () => ({
@@ -64,6 +66,8 @@ function createMalformedJsonRequest() {
 describe('POST /api/exercises/generate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnv.ARCJET_KEY = 'ajkey_test';
+    mockEnv.NODE_ENV = 'test';
     mockProtect.mockResolvedValue({
       isDenied: () => false,
       reason: { isRateLimit: () => false },
@@ -165,6 +169,25 @@ describe('POST /api/exercises/generate', () => {
 
     expect(response.status).toBe(422);
     expect(body.error).toBe('INVALID_REQUEST');
+    expect(mockEnqueueExerciseGeneration).not.toHaveBeenCalled();
+    expect(mockKickGenerationWorker).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 in production when ARCJET_KEY is missing', async () => {
+    mockEnv.ARCJET_KEY = undefined;
+    mockEnv.NODE_ENV = 'production';
+
+    const { POST } = await import('./route');
+    const response = await POST(createRequest({
+      documentIds: ['550e8400-e29b-41d4-a716-446655440000'],
+      exerciseType: 'multiple_choice',
+      count: 2,
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe('SERVICE_UNAVAILABLE');
+    expect(mockProtect).not.toHaveBeenCalled();
     expect(mockEnqueueExerciseGeneration).not.toHaveBeenCalled();
     expect(mockKickGenerationWorker).not.toHaveBeenCalled();
   });

@@ -8,6 +8,7 @@ import {
   ExerciseNotFoundError,
 } from '@/libs/AnswerEvaluation';
 import arcjet from '@/libs/Arcjet';
+import { getMissingArcjetConfigResponse } from '@/libs/ArcjetConfig';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
@@ -94,7 +95,10 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      logger.warn('Response rate limiting disabled - ARCJET_KEY not configured');
+      const missingArcjetConfigResponse = getMissingArcjetConfigResponse({ area: 'Response' });
+      if (missingArcjetConfigResponse) {
+        return missingArcjetConfigResponse;
+      }
     }
 
     const parsedBody = await parseJsonBody(request);

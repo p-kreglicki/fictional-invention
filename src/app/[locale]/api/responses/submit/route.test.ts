@@ -9,6 +9,12 @@ const mockWithRule = vi.fn(() => ({
   protect: mockProtect,
 }));
 const mockFixedWindow = vi.fn(() => []);
+const mockEnv = {
+  ARCJET_KEY: 'ajkey_test' as string | undefined,
+  RESPONSE_RATE_LIMIT_MAX_REQUESTS: 30,
+  RESPONSE_RATE_LIMIT_WINDOW_SECONDS: 60,
+  NODE_ENV: 'test' as 'production' | 'test',
+};
 class MockAuthenticationError extends Error {}
 class MockUserNotFoundError extends Error {}
 class MockExerciseNotFoundError extends Error {}
@@ -42,11 +48,7 @@ vi.mock('@/libs/Arcjet', () => ({
 }));
 
 vi.mock('@/libs/Env', () => ({
-  Env: {
-    ARCJET_KEY: 'ajkey_test',
-    RESPONSE_RATE_LIMIT_MAX_REQUESTS: 30,
-    RESPONSE_RATE_LIMIT_WINDOW_SECONDS: 60,
-  },
+  Env: mockEnv,
 }));
 
 vi.mock('@/libs/Logger', () => ({
@@ -77,6 +79,8 @@ function createMalformedJsonRequest() {
 describe('POST /api/responses/submit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnv.ARCJET_KEY = 'ajkey_test';
+    mockEnv.NODE_ENV = 'test';
     mockProtect.mockResolvedValue({
       isDenied: () => false,
       reason: { isRateLimit: () => false },
@@ -268,5 +272,24 @@ describe('POST /api/responses/submit', () => {
     expect(body.error).toBe('RATE_LIMIT_EXCEEDED');
     expect(response.headers.get('X-RateLimit-Limit')).toBe('30');
     expect(response.headers.get('Retry-After')).toBe('60');
+  });
+
+  it('returns 503 in production when ARCJET_KEY is missing', async () => {
+    mockEnv.ARCJET_KEY = undefined;
+    mockEnv.NODE_ENV = 'production';
+
+    const { POST } = await import('./route');
+    const response = await POST(createRequest({
+      exerciseId: '550e8400-e29b-41d4-a716-446655440000',
+      answer: 1,
+      clientSubmissionId: '550e8400-e29b-41d4-a716-446655440001',
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe('SERVICE_UNAVAILABLE');
+    expect(mockProtect).not.toHaveBeenCalled();
+    expect(mockEvaluateExerciseAnswer).not.toHaveBeenCalled();
+    expect(mockRecordExerciseResponse).not.toHaveBeenCalled();
   });
 });

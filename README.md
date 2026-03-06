@@ -63,6 +63,9 @@ MISTRAL_API_KEY=your_mistral_api_key
 # 0 or unset = no artificial delay
 MISTRAL_EMBEDDING_BATCH_DELAY_MS=0
 
+# Arcjet security and rate limiting (required in production)
+ARCJET_KEY=your_arcjet_site_key
+
 # Database (production)
 DATABASE_URL=your_postgres_connection_string
 
@@ -76,6 +79,9 @@ GENERATION_DISPATCH_TOKEN=your_manual_dispatch_token
 `MISTRAL_EMBEDDING_BATCH_DELAY_MS` controls optional throttling between embedding batches.
 Use `0` (or leave unset) for no delay, or set a positive value such as `31000` when using a
 rate-limited Mistral plan.
+
+`ARCJET_KEY` is required in production for bot protection and rate limiting on document upload,
+exercise generation, and answer submission routes. In development, the app still runs without it.
 
 `CRON_SECRET` secures the scheduled generation worker route. On Vercel, the cron job configured in
 [`vercel.json`](./vercel.json) calls

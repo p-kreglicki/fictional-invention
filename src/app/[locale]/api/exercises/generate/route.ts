@@ -3,6 +3,7 @@ import type { ArcjetDecision, ArcjetRateLimitReason } from '@arcjet/next';
 import { fixedWindow } from '@arcjet/next';
 import { NextResponse } from 'next/server';
 import arcjet from '@/libs/Arcjet';
+import { getMissingArcjetConfigResponse } from '@/libs/ArcjetConfig';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { Env } from '@/libs/Env';
 import { enqueueExerciseGeneration, kickGenerationWorker } from '@/libs/ExerciseGeneration';
@@ -97,7 +98,10 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      logger.warn('Exercise rate limiting disabled - ARCJET_KEY not configured');
+      const missingArcjetConfigResponse = getMissingArcjetConfigResponse({ area: 'Exercise' });
+      if (missingArcjetConfigResponse) {
+        return missingArcjetConfigResponse;
+      }
     }
 
     const parsedBody = await parseJsonBody(request);
