@@ -10,6 +10,7 @@ import {
   documentsSchema,
   exercisesSchema,
   generationJobsSchema,
+  responsesSchema,
 } from '@/models/Schema';
 import {
   GeneratedExercisesResponseSchema,
@@ -830,8 +831,9 @@ export async function getGenerationJobWithExercises(jobId: string, userId: strin
           difficulty: exercisesSchema.difficulty,
           question: exercisesSchema.question,
           exerciseData: exercisesSchema.exerciseData,
-          sourceChunkIds: exercisesSchema.sourceChunkIds,
           grammarFocus: exercisesSchema.grammarFocus,
+          timesAttempted: exercisesSchema.timesAttempted,
+          averageScore: exercisesSchema.averageScore,
           createdAt: exercisesSchema.createdAt,
         })
         .from(exercisesSchema)
@@ -862,14 +864,52 @@ export async function listRecentExercises(userId: string, limit = 50) {
       difficulty: exercisesSchema.difficulty,
       question: exercisesSchema.question,
       exerciseData: exercisesSchema.exerciseData,
-      sourceChunkIds: exercisesSchema.sourceChunkIds,
       grammarFocus: exercisesSchema.grammarFocus,
+      timesAttempted: exercisesSchema.timesAttempted,
+      averageScore: exercisesSchema.averageScore,
       createdAt: exercisesSchema.createdAt,
     })
     .from(exercisesSchema)
     .where(eq(exercisesSchema.userId, userId))
     .orderBy(desc(exercisesSchema.createdAt))
     .limit(limit);
+}
+
+/**
+ * Lists the latest stored response for each requested exercise.
+ * @param userId - Authenticated user ID.
+ * @param exerciseIds - Exercise IDs to load.
+ * @returns Latest response rows keyed by exercise ID.
+ */
+export async function listLatestResponsesForExercises(userId: string, exerciseIds: string[]) {
+  if (exerciseIds.length === 0) {
+    return new Map<string, never>();
+  }
+
+  const rows = await db
+    .selectDistinctOn([responsesSchema.exerciseId], {
+      id: responsesSchema.id,
+      exerciseId: responsesSchema.exerciseId,
+      score: responsesSchema.score,
+      evaluationMethod: sql<'deterministic' | 'llm'>`coalesce(${responsesSchema.evaluationMethod}::text, 'deterministic')`,
+      rubric: responsesSchema.rubric,
+      overallFeedback: responsesSchema.overallFeedback,
+      suggestedReview: responsesSchema.suggestedReview,
+      responseTimeMs: responsesSchema.responseTimeMs,
+      createdAt: responsesSchema.createdAt,
+    })
+    .from(responsesSchema)
+    .where(and(
+      eq(responsesSchema.userId, userId),
+      inArray(responsesSchema.exerciseId, exerciseIds),
+    ))
+    .orderBy(
+      responsesSchema.exerciseId,
+      desc(responsesSchema.createdAt),
+      desc(responsesSchema.id),
+    );
+
+  return new Map(rows.map(row => [row.exerciseId, row]));
 }
 
 /**

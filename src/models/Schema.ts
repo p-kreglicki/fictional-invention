@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -7,6 +8,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -70,6 +72,11 @@ export const generationJobStatusEnum = pgEnum('generation_job_status', [
   'failed',
 ]);
 
+export const evaluationMethodEnum = pgEnum('evaluation_method', [
+  'deterministic',
+  'llm',
+]);
+
 // Users table (synced from Clerk via webhook)
 export const usersSchema = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -94,7 +101,12 @@ export const documentsSchema = pgTable('documents', {
   errorMessage: text('error_message'),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
   processedAt: timestamp('processed_at', { mode: 'date' }),
-});
+}, table => ({
+  documentsUserCreatedIdx: index('documents_user_created_idx').on(
+    table.userId,
+    table.createdAt.desc(),
+  ),
+}));
 
 // Chunks table (document segments with embeddings)
 export const chunksSchema = pgTable('chunks', {
@@ -105,12 +117,14 @@ export const chunksSchema = pgTable('chunks', {
   tokenCount: integer('token_count').notNull(),
   pineconeId: text('pinecone_id').notNull().unique(),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-});
+}, table => ({
+  chunksDocumentIdx: index('chunks_document_id_idx').on(table.documentId),
+}));
 
 // Exercises table (generated exercises)
 export const exercisesSchema = pgTable('exercises', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => usersSchema.id).notNull(),
+  userId: uuid('user_id').references(() => usersSchema.id, { onDelete: 'cascade' }).notNull(),
   type: exerciseTypeEnum('type').notNull(),
   difficulty: difficultyEnum('difficulty'),
   question: text('question').notNull(),
@@ -125,21 +139,33 @@ export const exercisesSchema = pgTable('exercises', {
 // Responses table (user answers and evaluations)
 export const responsesSchema = pgTable('responses', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => usersSchema.id).notNull(),
-  exerciseId: uuid('exercise_id').references(() => exercisesSchema.id).notNull(),
+  userId: uuid('user_id').references(() => usersSchema.id, { onDelete: 'cascade' }).notNull(),
+  exerciseId: uuid('exercise_id').references(() => exercisesSchema.id, { onDelete: 'cascade' }).notNull(),
+  clientSubmissionId: uuid('client_submission_id'),
   answer: text('answer').notNull(),
   score: integer('score').notNull(),
+  evaluationMethod: evaluationMethodEnum('evaluation_method'),
   rubric: jsonb('rubric').notNull(),
   overallFeedback: text('overall_feedback').notNull(),
   suggestedReview: text('suggested_review').array(),
   responseTimeMs: integer('response_time_ms'),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-});
+}, table => ({
+  userSubmissionIdx: uniqueIndex('responses_user_submission_unique_idx').on(
+    table.userId,
+    table.clientSubmissionId,
+  ).where(sql`${table.clientSubmissionId} is not null`),
+  exerciseUserCreatedIdx: index('responses_exercise_user_created_idx').on(
+    table.exerciseId,
+    table.userId,
+    table.createdAt,
+  ),
+}));
 
 // Generation jobs table (async exercise generation lifecycle)
 export const generationJobsSchema = pgTable('generation_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => usersSchema.id).notNull(),
+  userId: uuid('user_id').references(() => usersSchema.id, { onDelete: 'cascade' }).notNull(),
   status: generationJobStatusEnum('status').default('pending').notNull(),
   exerciseType: exerciseTypeEnum('exercise_type').notNull(),
   documentIds: uuid('document_ids').array().notNull(),

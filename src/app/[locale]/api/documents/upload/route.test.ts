@@ -11,6 +11,12 @@ const mockWithRule = vi.fn(() => ({
   protect: mockProtect,
 }));
 const mockFixedWindow = vi.fn(() => []);
+const mockEnv = {
+  ARCJET_KEY: 'ajkey_test' as string | undefined,
+  UPLOAD_RATE_LIMIT_MAX_REQUESTS: 10,
+  UPLOAD_RATE_LIMIT_WINDOW_SECONDS: 60,
+  NODE_ENV: 'test' as 'production' | 'test',
+};
 let nextDocumentId = 0;
 
 vi.mock('@/libs/Auth', () => ({
@@ -28,11 +34,7 @@ vi.mock('@/libs/Arcjet', () => ({
 }));
 
 vi.mock('@/libs/Env', () => ({
-  Env: {
-    ARCJET_KEY: 'ajkey_test',
-    UPLOAD_RATE_LIMIT_MAX_REQUESTS: 10,
-    UPLOAD_RATE_LIMIT_WINDOW_SECONDS: 60,
-  },
+  Env: mockEnv,
 }));
 
 vi.mock('@/libs/ContentIngestion', () => ({
@@ -103,6 +105,8 @@ describe('POST /api/documents/upload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    mockEnv.ARCJET_KEY = 'ajkey_test';
+    mockEnv.NODE_ENV = 'test';
     nextDocumentId = 0;
     mockProtect.mockResolvedValue({
       isDenied: () => false,
@@ -209,6 +213,21 @@ describe('POST /api/documents/upload', () => {
 
     expect(mockExtractUrlContent).toHaveBeenCalledTimes(1);
     expect(mockExtractUrlContent).toHaveBeenCalledWith('https://example.com/article');
+  });
+
+  it('returns 503 in production when ARCJET_KEY is missing', async () => {
+    mockEnv.ARCJET_KEY = undefined;
+    mockEnv.NODE_ENV = 'production';
+
+    const { POST } = await loadRouteModule();
+    const response = await POST(createTextUploadRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe('SERVICE_UNAVAILABLE');
+    expect(mockProtect).not.toHaveBeenCalled();
+    expect(mockReserveDocumentSlot).not.toHaveBeenCalled();
+    expect(mockIngestContent).not.toHaveBeenCalled();
   });
 
   it('drains queued uploads in FIFO order as active slots free up', async () => {

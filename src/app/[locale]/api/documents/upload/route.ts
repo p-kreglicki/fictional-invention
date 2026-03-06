@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import * as z from 'zod';
 
 import arcjet from '@/libs/Arcjet';
+import { getMissingArcjetConfigResponse } from '@/libs/ArcjetConfig';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import {
   ingestContent,
@@ -319,7 +320,10 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      logger.warn('Upload rate limiting disabled - ARCJET_KEY not configured');
+      const missingArcjetConfigResponse = getMissingArcjetConfigResponse({ area: 'Upload' });
+      if (missingArcjetConfigResponse) {
+        return missingArcjetConfigResponse;
+      }
     }
 
     // Determine content type

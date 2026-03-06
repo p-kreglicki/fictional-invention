@@ -64,7 +64,7 @@ describe('GET /api/exercises/jobs/[id]', () => {
         completedAt: new Date('2026-03-05T10:00:10.000Z'),
       },
       exercises: [{
-        id: 'exercise-1',
+        id: '550e8400-e29b-41d4-a716-446655440010',
         type: 'multiple_choice',
         difficulty: 'beginner',
         question: 'Domanda',
@@ -72,8 +72,9 @@ describe('GET /api/exercises/jobs/[id]', () => {
           options: ['a', 'b', 'c', 'd'],
           correctIndex: 1,
         },
-        sourceChunkIds: ['chunk-1'],
         grammarFocus: null,
+        timesAttempted: 0,
+        averageScore: null,
         createdAt: new Date('2026-03-05T10:00:10.000Z'),
       }],
     });
@@ -88,5 +89,7 @@ describe('GET /api/exercises/jobs/[id]', () => {
     expect(body.id).toBe('550e8400-e29b-41d4-a716-446655440002');
     expect(body.status).toBe('completed');
     expect(body.exercises).toHaveLength(1);
+    expect(body.exercises[0].renderData.options).toEqual(['a', 'b', 'c', 'd']);
+    expect(body.exercises[0].renderData.correctIndex).toBeUndefined();
   });
 });

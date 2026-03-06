@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
-import { listActiveGenerationJobs, listRecentExercises } from '@/libs/ExerciseGeneration';
+import { listActiveGenerationJobs, listLatestResponsesForExercises, listRecentExercises } from '@/libs/ExerciseGeneration';
+import { toExerciseCard } from '@/libs/ExercisePresenter';
 import { logger } from '@/libs/Logger';
 
 export const runtime = 'nodejs';
@@ -12,17 +13,15 @@ export async function GET() {
       listRecentExercises(user.id, 50),
       listActiveGenerationJobs(user.id),
     ]);
+    const latestResponses = await listLatestResponsesForExercises(
+      user.id,
+      exercises.map(exercise => exercise.id),
+    );
 
     return NextResponse.json({
-      exercises: exercises.map(exercise => ({
-        id: exercise.id,
-        type: exercise.type,
-        difficulty: exercise.difficulty,
-        question: exercise.question,
-        exerciseData: exercise.exerciseData,
-        sourceChunkIds: exercise.sourceChunkIds,
-        grammarFocus: exercise.grammarFocus,
-        createdAt: exercise.createdAt.toISOString(),
+      exercises: exercises.map(exercise => toExerciseCard({
+        exercise,
+        latestResponse: latestResponses.get(exercise.id),
       })),
       activeJobs: activeJobs.map(job => ({
         id: job.id,

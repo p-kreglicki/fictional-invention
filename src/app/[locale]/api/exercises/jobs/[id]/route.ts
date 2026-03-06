@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { getGenerationJobWithExercises } from '@/libs/ExerciseGeneration';
+import { toExerciseCard } from '@/libs/ExercisePresenter';
 import { logger } from '@/libs/Logger';
 
 export const runtime = 'nodejs';
@@ -42,16 +43,7 @@ export async function GET(_request: Request, props: RouteParams) {
       createdAt: result.job.createdAt.toISOString(),
       startedAt: result.job.startedAt?.toISOString() ?? null,
       completedAt: result.job.completedAt?.toISOString() ?? null,
-      exercises: result.exercises.map(exercise => ({
-        id: exercise.id,
-        type: exercise.type,
-        difficulty: exercise.difficulty,
-        question: exercise.question,
-        exerciseData: exercise.exerciseData,
-        sourceChunkIds: exercise.sourceChunkIds,
-        grammarFocus: exercise.grammarFocus,
-        createdAt: exercise.createdAt.toISOString(),
-      })),
+      exercises: result.exercises.map(exercise => toExerciseCard({ exercise })),
     });
   } catch (error) {
     logger.error('Failed to get generation job', { error });
