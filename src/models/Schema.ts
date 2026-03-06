@@ -117,7 +117,7 @@ export const chunksSchema = pgTable('chunks', {
 // Exercises table (generated exercises)
 export const exercisesSchema = pgTable('exercises', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => usersSchema.id).notNull(),
+  userId: uuid('user_id').references(() => usersSchema.id, { onDelete: 'cascade' }).notNull(),
   type: exerciseTypeEnum('type').notNull(),
   difficulty: difficultyEnum('difficulty'),
   question: text('question').notNull(),
@@ -132,8 +132,8 @@ export const exercisesSchema = pgTable('exercises', {
 // Responses table (user answers and evaluations)
 export const responsesSchema = pgTable('responses', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => usersSchema.id).notNull(),
-  exerciseId: uuid('exercise_id').references(() => exercisesSchema.id).notNull(),
+  userId: uuid('user_id').references(() => usersSchema.id, { onDelete: 'cascade' }).notNull(),
+  exerciseId: uuid('exercise_id').references(() => exercisesSchema.id, { onDelete: 'cascade' }).notNull(),
   clientSubmissionId: uuid('client_submission_id'),
   answer: text('answer').notNull(),
   score: integer('score').notNull(),
@@ -158,7 +158,7 @@ export const responsesSchema = pgTable('responses', {
 // Generation jobs table (async exercise generation lifecycle)
 export const generationJobsSchema = pgTable('generation_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => usersSchema.id).notNull(),
+  userId: uuid('user_id').references(() => usersSchema.id, { onDelete: 'cascade' }).notNull(),
   status: generationJobStatusEnum('status').default('pending').notNull(),
   exerciseType: exerciseTypeEnum('exercise_type').notNull(),
   documentIds: uuid('document_ids').array().notNull(),

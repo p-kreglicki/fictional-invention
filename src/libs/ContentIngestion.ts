@@ -489,3 +489,62 @@ export async function deleteDocument(documentId: string, userId: string): Promis
     return false;
   }
 }
+
+/**
+ * Deletes a document during account removal with strict external cleanup guarantees.
+ * Deletes Pinecone vectors before removing the database row so webhook retries can
+ * fail closed without silently orphaning vectors.
+ * @param documentId - The document UUID to delete.
+ * @param userId - The owner user ID.
+ * @returns True when both Pinecone cleanup and database deletion succeed.
+ */
+export async function deleteDocumentForAccountDeletion(documentId: string, userId: string): Promise<boolean> {
+  try {
+    const [document] = await db
+      .select({ id: documentsSchema.id, userId: documentsSchema.userId })
+      .from(documentsSchema)
+      .where(eq(documentsSchema.id, documentId));
+
+    if (!document || document.userId !== userId) {
+      return false;
+    }
+
+    const chunks = await db
+      .select({ pineconeId: chunksSchema.pineconeId })
+      .from(chunksSchema)
+      .where(eq(chunksSchema.documentId, documentId));
+
+    if (chunks.length > 0) {
+      const index = getNamespacedIndex();
+      await index.deleteMany(chunks.map(chunk => chunk.pineconeId));
+    }
+
+    const deleted = await db.transaction(async (tx) => {
+      const [currentDocument] = await tx
+        .select({ id: documentsSchema.id, userId: documentsSchema.userId })
+        .from(documentsSchema)
+        .where(eq(documentsSchema.id, documentId));
+
+      if (!currentDocument || currentDocument.userId !== userId) {
+        return false;
+      }
+
+      await tx.delete(documentsSchema).where(eq(documentsSchema.id, documentId));
+      return true;
+    });
+
+    if (!deleted) {
+      logger.error('Account deletion document cleanup failed after Pinecone delete', {
+        documentId,
+        userId,
+      });
+      return false;
+    }
+
+    logger.info('Document deleted during account removal', { documentId, userId });
+    return true;
+  } catch (error) {
+    logger.error('Account deletion document cleanup failed', { documentId, userId, error });
+    return false;
+  }
+}

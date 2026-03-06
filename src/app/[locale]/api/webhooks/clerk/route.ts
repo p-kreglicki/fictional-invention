@@ -2,6 +2,7 @@ import type { WebhookEvent } from '@clerk/nextjs/server';
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { Webhook } from 'svix';
+import { deleteUserAccountByClerkId } from '@/libs/AccountDeletion';
 import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
@@ -68,9 +69,14 @@ export async function POST(req: Request) {
     case 'user.deleted': {
       const { id } = evt.data;
       if (id) {
-        // Cascade delete will handle related records
-        await db.delete(usersSchema).where(eq(usersSchema.clerkId, id));
-        logger.info('Deleted user from webhook', { clerkId: id });
+        const result = await deleteUserAccountByClerkId(id);
+
+        if (result === 'failed') {
+          logger.error('User deletion webhook failed', { clerkId: id });
+          return new Response('User deletion failed', { status: 500 });
+        }
+
+        logger.info('Handled user deletion webhook', { clerkId: id, result });
       }
       break;
     }
