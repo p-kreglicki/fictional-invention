@@ -423,29 +423,36 @@ export function ExerciseCards(props: ExerciseCardsProps) {
               {exercise.type === 'multiple_choice' && (
                 <fieldset className="mt-3 space-y-3">
                   <legend className="text-sm text-gray-700">{t('choose_correct_answer_label')}</legend>
-                  {exercise.renderData.options.map((option, index) => (
-                    <label
-                      key={`${exercise.id}-${index}-${option}`}
-                      className="flex cursor-pointer items-center gap-3 py-1 text-sm text-gray-700"
-                    >
-                      <input
-                        className="h-4 w-4 shrink-0 border-gray-300 text-gray-900"
-                        type="radio"
-                        name={`exercise-${exercise.id}`}
-                        value={String(index)}
-                        checked={answersByExerciseId[exercise.id] === String(index)}
-                        disabled={submissionState?.isSubmitting}
-                        onChange={(event) => {
-                          clearSubmissionDraft(exercise.id);
-                          setAnswersByExerciseId(current => ({
-                            ...current,
-                            [exercise.id]: event.target.value,
-                          }));
-                        }}
-                      />
-                      <span>{option}</span>
-                    </label>
-                  ))}
+                  {exercise.renderData.options.map((option, index, options) => {
+                    const duplicateCount = options
+                      .slice(0, index)
+                      .filter(existingOption => existingOption === option)
+                      .length;
+
+                    return (
+                      <label
+                        key={`${exercise.id}-${option}-${duplicateCount}`}
+                        className="flex cursor-pointer items-center gap-3 py-1 text-sm text-gray-700"
+                      >
+                        <input
+                          className="h-4 w-4 shrink-0 border-gray-300 text-gray-900"
+                          type="radio"
+                          name={`exercise-${exercise.id}`}
+                          value={String(index)}
+                          checked={answersByExerciseId[exercise.id] === String(index)}
+                          disabled={submissionState?.isSubmitting}
+                          onChange={(event) => {
+                            clearSubmissionDraft(exercise.id);
+                            setAnswersByExerciseId(current => ({
+                              ...current,
+                              [exercise.id]: event.target.value,
+                            }));
+                          }}
+                        />
+                        <span>{option}</span>
+                      </label>
+                    );
+                  })}
                 </fieldset>
               )}
 

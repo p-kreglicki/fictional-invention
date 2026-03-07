@@ -106,6 +106,7 @@ describe('ExerciseCards', () => {
 
     await expect.element(page.getByText('Choose correct answer')).toBeInTheDocument();
     await expect.element(page.getByText('Single choice')).not.toBeInTheDocument();
+
     await page.getByRole('radio').nth(0).click();
     await page.getByRole('button', { name: 'Submit answer' }).click();
 

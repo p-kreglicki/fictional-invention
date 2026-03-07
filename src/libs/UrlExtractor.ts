@@ -3,7 +3,7 @@
  * Fetches web pages and extracts readable text content.
  */
 
-import type { LookupFunction, LookupOptions } from 'node:net';
+import type { LookupFunction } from 'node:net';
 import { isIP } from 'node:net';
 
 import { Readability } from '@mozilla/readability';
@@ -109,10 +109,14 @@ export function createPinnedLookup(hostname: string, allowedIps: string[]): Look
       return;
     }
 
-    const normalizedOptions: LookupOptions = typeof options === 'number'
+    const normalizedOptions: { family?: number | 'IPv4' | 'IPv6'; all?: boolean } = typeof options === 'number'
       ? { family: options }
       : options;
-    const requestedFamily = normalizedOptions.family ?? 0;
+    const requestedFamily = normalizedOptions.family === 'IPv4'
+      ? 4
+      : normalizedOptions.family === 'IPv6'
+        ? 6
+        : normalizedOptions.family ?? 0;
     const candidates = allowedIps.filter((ip) => {
       const family = isIP(ip);
       return requestedFamily === 0 || family === requestedFamily;

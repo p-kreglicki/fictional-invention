@@ -105,6 +105,11 @@ describe('extractUrlContent', () => {
           return;
         }
 
+        if (!Array.isArray(records)) {
+          reject(new Error('Expected lookup to return all records.'));
+          return;
+        }
+
         resolve(records);
       });
     });
