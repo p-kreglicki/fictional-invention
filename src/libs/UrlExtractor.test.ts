@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { extractUrlContent, hasReadableContent } from './UrlExtractor';
+import { createPinnedLookup, extractUrlContent, hasReadableContent } from './UrlExtractor';
 import * as UrlValidator from './UrlValidator';
 
 // Mock the URL validator
@@ -92,6 +92,34 @@ afterEach(() => {
 });
 
 describe('extractUrlContent', () => {
+  it('returns all pinned addresses when lookup requests all records', async () => {
+    const lookup = createPinnedLookup('example.com', [
+      '93.184.216.34',
+      '2606:2800:220:1:248:1893:25c8:1946',
+    ]);
+
+    const addresses = await new Promise<Array<{ address: string; family: number }>>((resolve, reject) => {
+      lookup('example.com', { all: true, hints: 1024 }, (error, records) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (!Array.isArray(records)) {
+          reject(new Error('Expected lookup to return all records.'));
+          return;
+        }
+
+        resolve(records);
+      });
+    });
+
+    expect(addresses).toEqual([
+      { address: '93.184.216.34', family: 4 },
+      { address: '2606:2800:220:1:248:1893:25c8:1946', family: 6 },
+    ]);
+  });
+
   it('extracts text from readable HTML page', async () => {
     mockFetch.mockResolvedValue(createMockResponse({ body: READABLE_HTML }));
 

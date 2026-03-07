@@ -85,4 +85,30 @@ describe('ExerciseCardSchema', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('rejects multiple choice cards with duplicate options', () => {
+    const result = ExerciseCardSchema.safeParse({
+      id: '550e8400-e29b-41d4-a716-446655440010',
+      type: 'multiple_choice',
+      difficulty: 'beginner',
+      question: 'Quale forma e corretta?',
+      grammarFocus: 'imperfetto',
+      createdAt: '2026-03-05T10:30:00.000Z',
+      timesAttempted: 2,
+      averageScore: 75,
+      latestResponse: null,
+      renderData: {
+        options: ['andava', 'andava', 'andranno', 'andrei'],
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['renderData.options'],
+        }),
+      ]),
+    );
+  });
 });

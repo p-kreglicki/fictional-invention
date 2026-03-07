@@ -1,14 +1,19 @@
+import type { ExerciseCard } from '@/validations/ResponseValidation';
 import * as z from 'zod';
 import { EvaluationRubricSchema } from '@/validations/EvaluationSchemas';
 import {
+
   ExerciseCardSchema,
   ExerciseLatestResponseSchema,
 } from '@/validations/ResponseValidation';
+import { validateUniqueStrings } from '@/validations/UniqueStringValidation';
 
 const StoredMultipleChoiceDataSchema = z.object({
   options: z.array(z.string().trim().min(1)).length(4),
   correctIndex: z.number().int().min(0).max(3),
   explanation: z.string().trim().min(1).optional(),
+}).superRefine((value, context) => {
+  validateUniqueStrings(value.options, context, 'options');
 });
 
 const StoredFillGapDataSchema = z.object({
@@ -94,7 +99,7 @@ function toExerciseLatestResponse(input: unknown) {
   });
 }
 
-export function toExerciseCard(input: {
+function toExerciseCard(input: {
   exercise: unknown;
   latestResponse?: unknown;
 }) {
@@ -149,5 +154,28 @@ export function toExerciseCard(input: {
           gradingCriteria: exercise.exerciseData.gradingCriteria,
         },
       });
+  }
+}
+
+export function safeToExerciseCard(input: {
+  exercise: unknown;
+  latestResponse?: unknown;
+}): {
+  success: true;
+  data: ExerciseCard;
+} | {
+  success: false;
+  error: unknown;
+} {
+  try {
+    return {
+      success: true,
+      data: toExerciseCard(input),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error,
+    };
   }
 }

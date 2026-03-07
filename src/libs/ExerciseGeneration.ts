@@ -1,5 +1,6 @@
 import type { GeneratedExercise } from '@/validations/ExerciseValidation';
 import { and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { ZodError } from 'zod';
 import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
@@ -26,6 +27,7 @@ const MAX_WORKER_BATCH_SIZE = 100;
 const PENDING_STALE_JOB_THRESHOLD_MS = Env.GENERATION_PENDING_STALE_MS ?? 10 * 60 * 1000;
 const PROCESSING_STALE_JOB_THRESHOLD_MS = Env.GENERATION_PROCESSING_STALE_MS ?? 20 * 60 * 1000;
 const CHAT_REQUEST_DELAY_MS = Env.MISTRAL_CHAT_REQUEST_DELAY_MS ?? 0;
+const LOG_PAYLOAD_EXCERPT_LENGTH = 400;
 
 type GenerationCandidate = {
   documentId: string;
@@ -108,27 +110,135 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+function truncateForLog(value: string, maxLength = LOG_PAYLOAD_EXCERPT_LENGTH) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength)}...`;
+}
+
+function summarizeValidationIssues(error: ZodError) {
+  return error.issues.slice(0, 5).map(issue => ({
+    path: issue.path.join('.'),
+    code: issue.code,
+    message: issue.message,
+  }));
+}
+
+function classifyStructuredGenerationFailure(error: unknown) {
+  if (error instanceof Error && error.message === 'Mistral structured output parsing failed') {
+    return 'unparsable_response';
+  }
+
+  return 'provider_error';
+}
+
+function buildCandidateSubsetKey(candidates: GenerationCandidate[]) {
+  return candidates
+    .map(candidate => buildSourceReferenceKey(candidate))
+    .join('|');
+}
+
+function normalizeGeneratedQuestion(question: string) {
+  return question
+    .normalize('NFC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('it-IT');
+}
+
+function prepareGeneratedExerciseForInsert(
+  exercise: GeneratedExercise,
+  random: () => number = Math.random,
+): GeneratedExercise {
+  if (exercise.type !== 'multiple_choice') {
+    return exercise;
+  }
+
+  const shuffledOptions = exercise.exerciseData.options.map((option, index) => ({
+    option,
+    isCorrect: index === exercise.exerciseData.correctIndex,
+  }));
+
+  for (let index = shuffledOptions.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    const current = shuffledOptions[index];
+    const next = shuffledOptions[swapIndex];
+
+    if (!current || !next) {
+      continue;
+    }
+
+    shuffledOptions[index] = next;
+    shuffledOptions[swapIndex] = current;
+  }
+
+  return {
+    ...exercise,
+    exerciseData: {
+      ...exercise.exerciseData,
+      options: shuffledOptions.map(item => item.option),
+      correctIndex: shuffledOptions.findIndex(item => item.isCorrect),
+    },
+  };
+}
+
 function selectCandidateSubset(
   candidates: GenerationCandidate[],
   exerciseIndex: number,
   subsetSize: number,
+  attempt: number,
+  usedSubsetKeys: Set<string>,
 ) {
   if (candidates.length <= subsetSize) {
     return candidates;
   }
 
-  const selected: GenerationCandidate[] = [];
-  const start = (exerciseIndex * subsetSize) % candidates.length;
+  const candidateCount = candidates.length;
+  const startOffset = (exerciseIndex + Math.max(attempt - 1, 0)) % candidateCount;
 
-  for (let i = 0; i < subsetSize; i += 1) {
-    const index = (start + i) % candidates.length;
-    const candidate = candidates[index];
-    if (candidate) {
-      selected.push(candidate);
+  for (let offset = 0; offset < candidateCount; offset += 1) {
+    const selected: GenerationCandidate[] = [];
+    const start = (startOffset + offset) % candidateCount;
+
+    for (let i = 0; i < subsetSize; i += 1) {
+      const index = (start + i) % candidateCount;
+      const candidate = candidates[index];
+      if (candidate) {
+        selected.push(candidate);
+      }
+    }
+
+    if (selected.length !== subsetSize) {
+      continue;
+    }
+
+    const subsetKey = buildCandidateSubsetKey(selected);
+    if (!usedSubsetKeys.has(subsetKey)) {
+      return selected;
     }
   }
 
-  return selected;
+  const fallback: GenerationCandidate[] = [];
+  const start = startOffset % candidateCount;
+  for (let i = 0; i < subsetSize; i += 1) {
+    const index = (start + i) % candidateCount;
+    const candidate = candidates[index];
+    if (candidate) {
+      fallback.push(candidate);
+    }
+  }
+
+  return fallback;
 }
 
 function buildSourceReferenceKey(input: { documentId: string; chunkPosition: number }) {
@@ -248,16 +358,20 @@ async function insertGeneratedExercise(input: {
   difficulty: 'beginner' | 'intermediate' | 'advanced' | undefined;
   topicFocus: string | undefined;
   chunkIds: string[];
+  documentIds: string[];
 }) {
+  const generatedExercise = prepareGeneratedExerciseForInsert(input.generated);
+
   const [exercise] = await db
     .insert(exercisesSchema)
     .values({
       userId: input.userId,
-      type: input.generated.type,
+      type: generatedExercise.type,
       difficulty: input.difficulty ?? null,
-      question: input.generated.question,
-      exerciseData: input.generated.exerciseData,
+      question: generatedExercise.question,
+      exerciseData: generatedExercise.exerciseData,
       sourceChunkIds: input.chunkIds,
+      sourceDocumentIds: input.documentIds,
       grammarFocus: input.topicFocus ?? null,
     })
     .returning({
@@ -351,12 +465,17 @@ async function generateSingleExercise(input: {
 async function generateSingleExerciseWithFallback(input: {
   systemPrompt: string;
   userPrompt: string;
+  jobId: string;
+  attempt: number;
 }) {
   try {
     return await generateSingleExercise(input);
   } catch (error) {
     logger.warn('exercise_generation_structured_failed', {
-      error,
+      jobId: input.jobId,
+      attempt: input.attempt,
+      failureKind: classifyStructuredGenerationFailure(error),
+      errorMessage: getErrorMessage(error),
     });
 
     const content = await createJsonChatCompletion({
@@ -364,13 +483,33 @@ async function generateSingleExerciseWithFallback(input: {
       userPrompt: input.userPrompt,
     });
 
-    const parsed = GeneratedExercisesResponseSchema.parse(JSON.parse(content));
-    const firstExercise = parsed.exercises[0];
-    if (!firstExercise) {
-      throw new Error('No exercise returned by JSON fallback generation');
-    }
+    try {
+      const parsed = GeneratedExercisesResponseSchema.parse(JSON.parse(content));
+      const firstExercise = parsed.exercises[0];
+      if (!firstExercise) {
+        throw new Error('No exercise returned by JSON fallback generation');
+      }
 
-    return firstExercise;
+      return firstExercise;
+    } catch (fallbackError) {
+      if (fallbackError instanceof SyntaxError) {
+        logger.warn('exercise_generation_json_parse_failed', {
+          jobId: input.jobId,
+          attempt: input.attempt,
+          errorMessage: fallbackError.message,
+          rawContentExcerpt: truncateForLog(content),
+        });
+      } else if (fallbackError instanceof ZodError) {
+        logger.warn('exercise_generation_json_validation_failed', {
+          jobId: input.jobId,
+          attempt: input.attempt,
+          issues: summarizeValidationIssues(fallbackError),
+          rawContentExcerpt: truncateForLog(content),
+        });
+      }
+
+      throw fallbackError;
+    }
   }
 }
 
@@ -453,14 +592,25 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
   let generatedCount = 0;
   let failedCount = 0;
   const exerciseIds: string[] = [];
+  const previousQuestions: string[] = [];
+  const previousQuestionKeys = new Set<string>();
+  const usedSubsetKeys = new Set<string>();
 
   for (let index = 0; index < parsedRequest.count; index += 1) {
-    const subset = selectCandidateSubset(candidates, index, EXCERPT_SUBSET_SIZE);
     let generated = null;
     let generatedCandidates: GenerationCandidate[] | null = null;
+    let generatedQuestionKey: string | null = null;
+    let generatedSubsetKey: string | null = null;
 
     for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
       try {
+        const subset = selectCandidateSubset(
+          candidates,
+          index,
+          EXCERPT_SUBSET_SIZE,
+          attempt,
+          usedSubsetKeys,
+        );
         const userPrompt = buildExerciseUserPrompt({
           request: parsedRequest,
           chunks: subset.map(chunk => ({
@@ -469,15 +619,24 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
             content: chunk.content,
           })),
           attempt,
+          exerciseNumber: index + 1,
+          previousQuestions,
         });
 
         const result = await generateSingleExerciseWithFallback({
           systemPrompt,
           userPrompt,
+          jobId: job.id,
+          attempt,
         });
 
         if (result.type !== parsedRequest.exerciseType) {
           throw new Error(`Generated type "${result.type}" does not match requested "${parsedRequest.exerciseType}"`);
+        }
+
+        const questionKey = normalizeGeneratedQuestion(result.question);
+        if (previousQuestionKeys.has(questionKey)) {
+          throw new Error('Generated question duplicates a previous exercise in this job');
         }
 
         const referencedCandidates = resolveGeneratedSourceReferenceCandidates({
@@ -490,6 +649,8 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
 
         generated = result;
         generatedCandidates = referencedCandidates;
+        generatedQuestionKey = questionKey;
+        generatedSubsetKey = buildCandidateSubsetKey(subset);
         break;
       } catch (error) {
         logger.warn('exercise_generation_attempt_failed', {
@@ -527,6 +688,7 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
       difficulty: parsedRequest.difficulty,
       topicFocus: parsedRequest.topicFocus,
       chunkIds,
+      documentIds: [...new Set((generatedCandidates ?? []).map(candidate => candidate.documentId))],
     });
 
     if (!insertedExerciseId) {
@@ -537,6 +699,13 @@ async function runClaimedGenerationJob(job: ClaimedGenerationJob) {
 
     generatedCount += 1;
     exerciseIds.push(insertedExerciseId);
+    previousQuestions.push(generated.question);
+    if (generatedQuestionKey) {
+      previousQuestionKeys.add(generatedQuestionKey);
+    }
+    if (generatedSubsetKey) {
+      usedSubsetKeys.add(generatedSubsetKey);
+    }
 
     await db
       .update(generationJobsSchema)

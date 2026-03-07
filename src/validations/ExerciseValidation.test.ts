@@ -34,7 +34,7 @@ describe('GeneratedExercisesResponseSchema', () => {
     const result = GeneratedExercisesResponseSchema.safeParse({
       exercises: [{
         type: 'multiple_choice',
-        question: 'Quale frase è corretta?',
+        question: 'Completa: Io ___ al mercato ieri.',
         sourceReferences: [
           {
             documentId: '550e8400-e29b-41d4-a716-446655440000',
@@ -55,6 +55,32 @@ describe('GeneratedExercisesResponseSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects multiple choice payload without one placeholder', () => {
+    const result = GeneratedExercisesResponseSchema.safeParse({
+      exercises: [{
+        type: 'multiple_choice',
+        question: 'Quale forma verbale corrisponde all imperfetto di fare per io?',
+        sourceReferences: [{
+          documentId: '550e8400-e29b-41d4-a716-446655440000',
+          chunkPosition: 0,
+        }],
+        exerciseData: {
+          options: ['facevo', 'facevi', 'faceva', 'facevano'],
+          correctIndex: 0,
+        },
+      }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['exercises', 0, 'question'],
+        }),
+      ]),
+    );
+  });
+
   it('rejects fill gap payload without one placeholder', () => {
     const result = GeneratedExercisesResponseSchema.safeParse({
       exercises: [{
@@ -71,6 +97,30 @@ describe('GeneratedExercisesResponseSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('parses topic-guided fill gap payload with multiple supporting source references', () => {
+    const result = GeneratedExercisesResponseSchema.safeParse({
+      exercises: [{
+        type: 'fill_gap',
+        question: 'Completa: Al mio paese io ___ con la mia famiglia in una casa vicina al mare.',
+        sourceReferences: [
+          {
+            documentId: '550e8400-e29b-41d4-a716-446655440000',
+            chunkPosition: 0,
+          },
+          {
+            documentId: '550e8400-e29b-41d4-a716-446655440001',
+            chunkPosition: 1,
+          },
+        ],
+        exerciseData: {
+          answer: 'vivevo',
+        },
+      }],
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it('rejects duplicate source references', () => {
@@ -96,5 +146,55 @@ describe('GeneratedExercisesResponseSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('rejects multiple choice payload with duplicate options', () => {
+    const result = GeneratedExercisesResponseSchema.safeParse({
+      exercises: [{
+        type: 'multiple_choice',
+        question: 'Completa: Lui ___ ogni sera.',
+        sourceReferences: [{
+          documentId: '550e8400-e29b-41d4-a716-446655440000',
+          chunkPosition: 0,
+        }],
+        exerciseData: {
+          options: ['andava', 'andava', 'andranno', 'andrei'],
+          correctIndex: 0,
+        },
+      }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['exercises', 0, 'exerciseData.options'],
+        }),
+      ]),
+    );
+  });
+
+  it('rejects multiple choice payload with flat top-level options', () => {
+    const result = GeneratedExercisesResponseSchema.safeParse({
+      exercises: [{
+        type: 'multiple_choice',
+        question: 'Completa: Tu ___ subito.',
+        sourceReferences: [{
+          documentId: '550e8400-e29b-41d4-a716-446655440000',
+          chunkPosition: 0,
+        }],
+        options: ['vai', 'vada', 'andiamo', 'vanno'],
+        correctIndex: 0,
+      }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['exercises', 0, 'exerciseData'],
+        }),
+      ]),
+    );
   });
 });

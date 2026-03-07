@@ -102,18 +102,49 @@ const fetchSemaphore = new Semaphore(URL_MAX_CONCURRENT_FETCHES);
  * @param allowedIps - Pre-validated IP addresses from SSRF check
  * @returns Lookup function that returns only allowed IPs
  */
-function createPinnedLookup(hostname: string, allowedIps: string[]): LookupFunction {
+export function createPinnedLookup(hostname: string, allowedIps: string[]): LookupFunction {
   return (lookupHost, options, callback) => {
     if (lookupHost !== hostname) {
       callback(new Error('Unexpected hostname in lookup'), '', 4);
       return;
     }
 
-    const requestedFamily = typeof options === 'number' ? options : options.family ?? 0;
+    const normalizedOptions: { family?: number | 'IPv4' | 'IPv6'; all?: boolean } = typeof options === 'number'
+      ? { family: options }
+      : options;
+    const requestedFamily = normalizedOptions.family === 'IPv4'
+      ? 4
+      : normalizedOptions.family === 'IPv6'
+        ? 6
+        : normalizedOptions.family ?? 0;
     const candidates = allowedIps.filter((ip) => {
       const family = isIP(ip);
       return requestedFamily === 0 || family === requestedFamily;
     });
+
+    if (normalizedOptions.all) {
+      const addresses = candidates
+        .map((ip) => {
+          const family = isIP(ip);
+          if (family !== 4 && family !== 6) {
+            return null;
+          }
+
+          return {
+            address: ip,
+            family,
+          };
+        })
+        .filter((value): value is { address: string; family: 4 | 6 } => value !== null);
+
+      if (addresses.length === 0) {
+        callback(new Error('No allowed IP for requested address family'), [], 0);
+        return;
+      }
+
+      callback(null, addresses, 0);
+      return;
+    }
 
     const selected = candidates[0];
     if (!selected) {

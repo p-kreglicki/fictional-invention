@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { AuthenticationError, requireUser, UserNotFoundError } from '@/libs/Auth';
 import { listActiveGenerationJobs, listLatestResponsesForExercises, listRecentExercises } from '@/libs/ExerciseGeneration';
-import { toExerciseCard } from '@/libs/ExercisePresenter';
+import { safeToExerciseCard } from '@/libs/ExercisePresenter';
 import { logger } from '@/libs/Logger';
 
 export const runtime = 'nodejs';
@@ -17,12 +17,25 @@ export async function GET() {
       user.id,
       exercises.map(exercise => exercise.id),
     );
-
-    return NextResponse.json({
-      exercises: exercises.map(exercise => toExerciseCard({
+    const exerciseCards = exercises.flatMap((exercise) => {
+      const result = safeToExerciseCard({
         exercise,
         latestResponse: latestResponses.get(exercise.id),
-      })),
+      });
+
+      if (!result.success) {
+        logger.warn('exercise_card_serialization_failed', {
+          exerciseId: exercise.id,
+          error: result.error,
+        });
+        return [];
+      }
+
+      return [result.data];
+    });
+
+    return NextResponse.json({
+      exercises: exerciseCards,
       activeJobs: activeJobs.map(job => ({
         id: job.id,
         status: job.status,

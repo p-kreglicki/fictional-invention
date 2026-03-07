@@ -86,4 +86,47 @@ describe('GET /api/exercises', () => {
     expect(body.exercises[0].latestResponse.score).toBe(84);
     expect(body.exercises[0].renderData.sampleAnswer).toBeUndefined();
   });
+
+  it('skips malformed exercises instead of returning 500', async () => {
+    mockListRecentExercises.mockResolvedValue([
+      {
+        id: '550e8400-e29b-41d4-a716-446655440010',
+        type: 'multiple_choice',
+        difficulty: 'beginner',
+        question: 'Quale forma e corretta?',
+        exerciseData: {
+          options: ['andava', 'andava', 'andava', 'andava'],
+          correctIndex: 0,
+        },
+        grammarFocus: 'imperfetto',
+        timesAttempted: 0,
+        averageScore: null,
+        createdAt: new Date('2026-03-05T10:10:00.000Z'),
+      },
+      {
+        id: '550e8400-e29b-41d4-a716-446655440011',
+        type: 'single_answer',
+        difficulty: 'intermediate',
+        question: 'Spiega la frase',
+        exerciseData: {
+          sampleAnswer: 'Risposta',
+          gradingCriteria: ['correttezza'],
+        },
+        grammarFocus: 'congiuntivo',
+        timesAttempted: 2,
+        averageScore: 84,
+        createdAt: new Date('2026-03-05T10:11:00.000Z'),
+      },
+    ]);
+    mockListLatestResponsesForExercises.mockResolvedValue(new Map());
+    mockListActiveGenerationJobs.mockResolvedValue([]);
+
+    const { GET } = await import('./route');
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.exercises).toHaveLength(1);
+    expect(body.exercises[0].id).toBe('550e8400-e29b-41d4-a716-446655440011');
+  });
 });

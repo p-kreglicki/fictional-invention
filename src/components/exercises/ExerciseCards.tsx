@@ -7,6 +7,7 @@ import type {
 } from '@/validations/ResponseValidation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
+import { SubmissionDraftsSchema, SubmitResponseSuccessSchema } from '@/validations/ResponseValidation';
 
 type ExerciseCardsProps = {
   exercises: ExerciseCardItem[];
@@ -17,6 +18,7 @@ type ExerciseCardsProps = {
     timesAttempted: number;
     averageScore: number | null;
   }) => void;
+  onExerciseSyncRequested?: (exerciseId: string) => Promise<SubmitResponseSuccess | null>;
 };
 
 type SubmissionState = {
@@ -46,8 +48,12 @@ function readSubmissionDrafts() {
       return {} as Record<string, SubmissionDraft>;
     }
 
-    const parsed = JSON.parse(raw) as Record<string, SubmissionDraft>;
-    return parsed ?? {};
+    const parsed = SubmissionDraftsSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      return {} as Record<string, SubmissionDraft>;
+    }
+
+    return parsed.data;
   } catch {
     return {} as Record<string, SubmissionDraft>;
   }
@@ -208,10 +214,46 @@ export function ExerciseCards(props: ExerciseCardsProps) {
   const requestIdByExerciseIdRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
       isMountedRef.current = false;
     };
   }, []);
+
+  function isLatestRequest(exerciseId: string, requestId: number) {
+    return requestIdByExerciseIdRef.current[exerciseId] === requestId;
+  }
+
+  function applySubmissionResult(input: {
+    exerciseId: string;
+    payload: SubmitResponseSuccess;
+  }) {
+    props.onExerciseUpdated({
+      exerciseId: input.exerciseId,
+      latestResponse: input.payload.response,
+      timesAttempted: input.payload.exerciseStats.timesAttempted,
+      averageScore: input.payload.exerciseStats.averageScore,
+    });
+  }
+
+  function setSubmissionIdle(input: {
+    exerciseId: string;
+    requestId: number;
+    errorMessage: string | null;
+  }) {
+    if (!isMountedRef.current || !isLatestRequest(input.exerciseId, input.requestId)) {
+      return;
+    }
+
+    setSubmissionStateByExerciseId(current => ({
+      ...current,
+      [input.exerciseId]: {
+        isSubmitting: false,
+        errorMessage: input.errorMessage,
+      },
+    }));
+  }
 
   async function handleSubmit(exercise: ExerciseCardItem) {
     const currentState = submissionStateByExerciseId[exercise.id];
@@ -270,46 +312,60 @@ export function ExerciseCards(props: ExerciseCardsProps) {
         }),
       });
 
-      const payload = await response.json() as Partial<SubmitResponseSuccess> & {
+      const payload = await response.json() as {
         error?: string;
         message?: string;
       };
+      const parsedPayload = SubmitResponseSuccessSchema.safeParse(payload);
 
-      if (!response.ok || !payload.response || !payload.exerciseStats) {
+      if (!response.ok) {
         throw new Error(payload.message ?? payload.error ?? t('submission_failed'));
       }
 
-      if (!isMountedRef.current || requestIdByExerciseIdRef.current[exercise.id] !== requestId) {
+      if (!parsedPayload.success) {
+        const refreshedPayload = await props.onExerciseSyncRequested?.(exercise.id) ?? null;
+        if (!refreshedPayload) {
+          throw new Error(t('submission_failed'));
+        }
+
+        if (!isMountedRef.current || !isLatestRequest(exercise.id, requestId)) {
+          return;
+        }
+
+        applySubmissionResult({
+          exerciseId: exercise.id,
+          payload: refreshedPayload,
+        });
+        clearSubmissionDraft(exercise.id);
+        setSubmissionIdle({
+          exerciseId: exercise.id,
+          requestId,
+          errorMessage: null,
+        });
         return;
       }
 
-      props.onExerciseUpdated({
+      if (!isMountedRef.current || !isLatestRequest(exercise.id, requestId)) {
+        return;
+      }
+
+      applySubmissionResult({
         exerciseId: exercise.id,
-        latestResponse: payload.response,
-        timesAttempted: payload.exerciseStats.timesAttempted,
-        averageScore: payload.exerciseStats.averageScore,
+        payload: parsedPayload.data,
       });
       clearSubmissionDraft(exercise.id);
 
-      setSubmissionStateByExerciseId(current => ({
-        ...current,
-        [exercise.id]: {
-          isSubmitting: false,
-          errorMessage: null,
-        },
-      }));
+      setSubmissionIdle({
+        exerciseId: exercise.id,
+        requestId,
+        errorMessage: null,
+      });
     } catch (error) {
-      if (!isMountedRef.current || requestIdByExerciseIdRef.current[exercise.id] !== requestId) {
-        return;
-      }
-
-      setSubmissionStateByExerciseId(current => ({
-        ...current,
-        [exercise.id]: {
-          isSubmitting: false,
-          errorMessage: getSubmissionErrorMessage({ error, t }),
-        },
-      }));
+      setSubmissionIdle({
+        exerciseId: exercise.id,
+        requestId,
+        errorMessage: getSubmissionErrorMessage({ error, t }),
+      });
     }
   }
 
@@ -329,22 +385,29 @@ export function ExerciseCards(props: ExerciseCardsProps) {
       <div className="grid gap-4 md:grid-cols-2">
         {props.exercises.map((exercise) => {
           const submissionState = submissionStateByExerciseId[exercise.id];
+          const exerciseTypeLabel = exercise.type === 'multiple_choice'
+            ? null
+            : getExerciseTypeLabel({ exercise, t });
           const difficultyLabel = getDifficultyLabel({
             difficulty: exercise.difficulty,
             t,
           });
+          const metadataLabels = [exerciseTypeLabel, difficultyLabel].filter(
+            (label): label is string => label !== null,
+          );
 
           return (
             <article key={exercise.id} className="rounded-md border border-gray-200 bg-white p-4">
-              <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-gray-500 uppercase">
-                <span>{getExerciseTypeLabel({ exercise, t })}</span>
-                {difficultyLabel && (
-                  <>
-                    <span aria-hidden="true">•</span>
-                    <span>{difficultyLabel}</span>
-                  </>
-                )}
-              </div>
+              {metadataLabels.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-gray-500 uppercase">
+                  {metadataLabels.map((label, index) => (
+                    <span key={`${exercise.id}-${label}`}>
+                      {index > 0 && <span aria-hidden="true" className="mr-2">•</span>}
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <h3 className="mt-2 text-sm font-semibold text-gray-900">{exercise.question}</h3>
 
@@ -358,30 +421,38 @@ export function ExerciseCards(props: ExerciseCardsProps) {
               )}
 
               {exercise.type === 'multiple_choice' && (
-                <fieldset className="mt-3 space-y-2">
-                  <legend className="text-sm text-gray-700">{t('answer_input_label')}</legend>
-                  {exercise.renderData.options.map((option, index) => (
-                    <label
-                      key={`${exercise.id}-${option}`}
-                      className="flex items-start gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700"
-                    >
-                      <input
-                        type="radio"
-                        name={`exercise-${exercise.id}`}
-                        value={String(index)}
-                        checked={answersByExerciseId[exercise.id] === String(index)}
-                        disabled={submissionState?.isSubmitting}
-                        onChange={(event) => {
-                          clearSubmissionDraft(exercise.id);
-                          setAnswersByExerciseId(current => ({
-                            ...current,
-                            [exercise.id]: event.target.value,
-                          }));
-                        }}
-                      />
-                      <span>{option}</span>
-                    </label>
-                  ))}
+                <fieldset className="mt-3 space-y-3">
+                  <legend className="text-sm text-gray-700">{t('choose_correct_answer_label')}</legend>
+                  {exercise.renderData.options.map((option, index, options) => {
+                    const duplicateCount = options
+                      .slice(0, index)
+                      .filter(existingOption => existingOption === option)
+                      .length;
+
+                    return (
+                      <label
+                        key={`${exercise.id}-${option}-${duplicateCount}`}
+                        className="flex cursor-pointer items-center gap-3 py-1 text-sm text-gray-700"
+                      >
+                        <input
+                          className="h-4 w-4 shrink-0 border-gray-300 text-gray-900"
+                          type="radio"
+                          name={`exercise-${exercise.id}`}
+                          value={String(index)}
+                          checked={answersByExerciseId[exercise.id] === String(index)}
+                          disabled={submissionState?.isSubmitting}
+                          onChange={(event) => {
+                            clearSubmissionDraft(exercise.id);
+                            setAnswersByExerciseId(current => ({
+                              ...current,
+                              [exercise.id]: event.target.value,
+                            }));
+                          }}
+                        />
+                        <span>{option}</span>
+                      </label>
+                    );
+                  })}
                 </fieldset>
               )}
 
@@ -447,21 +518,6 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                   </div>
                 </div>
               )}
-
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600">
-                <span>
-                  {t('attempts_label')}
-                  :
-                  {' '}
-                  {exercise.timesAttempted}
-                </span>
-                <span>
-                  {t('average_score_label')}
-                  :
-                  {' '}
-                  {exercise.averageScore ?? '—'}
-                </span>
-              </div>
 
               <div className="mt-4 flex items-center gap-3">
                 <button
