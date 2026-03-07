@@ -1,18 +1,13 @@
 'use client';
 
+import type { DocumentListItem } from '@/validations/DocumentValidation';
 import type { GenerateExercisesRequest } from '@/validations/ExerciseValidation';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { GenerateExercisesRequestSchema } from '@/validations/ExerciseValidation';
 
-type ReadyDocument = {
-  id: string;
-  title: string;
-  contentType: 'pdf' | 'url' | 'text';
-};
-
 type ExerciseGeneratorFormProps = {
-  documents: ReadyDocument[];
+  documents: DocumentListItem[];
   isSubmitting: boolean;
   onSubmit: (request: GenerateExercisesRequest) => Promise<void>;
   serverError: string | null;
@@ -26,13 +21,15 @@ export function ExerciseGeneratorForm(props: ExerciseGeneratorFormProps) {
   const [difficulty, setDifficulty] = useState<GenerateExercisesRequest['difficulty']>();
   const [topicFocus, setTopicFocus] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const availableDocumentIds = new Set(props.documents.map(document => document.id));
+  const activeSelectedDocumentIds = selectedDocumentIds.filter(id => availableDocumentIds.has(id));
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
 
     const parsed = GenerateExercisesRequestSchema.safeParse({
-      documentIds: selectedDocumentIds,
+      documentIds: activeSelectedDocumentIds,
       exerciseType,
       count,
       difficulty,
@@ -66,12 +63,20 @@ export function ExerciseGeneratorForm(props: ExerciseGeneratorFormProps) {
           {props.documents.map(document => (
             <label key={document.id} className="flex items-center gap-2 text-sm text-gray-700">
               <input
-                checked={selectedDocumentIds.includes(document.id)}
+                checked={activeSelectedDocumentIds.includes(document.id)}
                 className="h-4 w-4 rounded border-gray-300"
                 onChange={() => toggleDocumentSelection(document.id)}
                 type="checkbox"
               />
-              <span>{document.title}</span>
+              <span>
+                {document.title}
+                {' '}
+                <span className="text-gray-500">
+                  (
+                  {t(`document_type_${document.contentType}`)}
+                  )
+                </span>
+              </span>
             </label>
           ))}
           {props.documents.length === 0 && (

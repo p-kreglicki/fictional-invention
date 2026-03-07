@@ -130,11 +130,17 @@ export const exercisesSchema = pgTable('exercises', {
   question: text('question').notNull(),
   exerciseData: jsonb('exercise_data').notNull(),
   sourceChunkIds: uuid('source_chunk_ids').array().notNull(),
+  sourceDocumentIds: uuid('source_document_ids').array().notNull(),
   grammarFocus: text('grammar_focus'),
   timesAttempted: integer('times_attempted').default(0),
   averageScore: integer('average_score'),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-});
+}, table => ({
+  exercisesSourceDocumentIdsIdx: index('exercises_source_document_ids_idx').using(
+    'gin',
+    sql`${table.sourceDocumentIds}`,
+  ),
+}));
 
 // Responses table (user answers and evaluations)
 export const responsesSchema = pgTable('responses', {
