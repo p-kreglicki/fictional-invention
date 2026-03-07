@@ -1,0 +1,1 @@
+CREATE INDEX "responses_user_created_idx" ON "responses" USING btree ("user_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);

@@ -57,6 +57,13 @@
       "when": 1772809903845,
       "tag": "0007_strong_black_cat",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1772880314206,
+      "tag": "0008_workable_shadow_king",
+      "breakpoints": true
     }
   ]
 }

@@ -166,6 +166,11 @@ export const responsesSchema = pgTable('responses', {
     table.userId,
     table.createdAt,
   ),
+  userCreatedIdx: index('responses_user_created_idx').on(
+    table.userId,
+    table.createdAt.desc(),
+    table.id.desc(),
+  ),
 }));
 
 // Generation jobs table (async exercise generation lifecycle)
