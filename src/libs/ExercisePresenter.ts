@@ -99,7 +99,7 @@ function toExerciseLatestResponse(input: unknown) {
   });
 }
 
-export function toExerciseCard(input: {
+function toExerciseCard(input: {
   exercise: unknown;
   latestResponse?: unknown;
 }) {

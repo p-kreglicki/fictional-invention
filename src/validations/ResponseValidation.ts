@@ -11,7 +11,7 @@ const EvaluationMethodSchema = z.enum(evaluationMethodValues);
 const TextAnswerSchema = z.string().trim().min(1).max(2000);
 const MultipleChoiceAnswerSchema = z.number().int().min(0).max(3);
 
-export const SubmissionDraftSchema = z.object({
+const SubmissionDraftSchema = z.object({
   answerKey: z.string().min(1).max(2100),
   clientSubmissionId: z.uuid(),
 });
@@ -139,10 +139,6 @@ export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
 export type ExerciseLatestResponse = z.infer<typeof ExerciseLatestResponseSchema>;
 export type ExerciseCard = z.infer<typeof ExerciseCardSchema>;
 export type SubmitResponseSuccess = z.infer<typeof SubmitResponseSuccessSchema>;
-export type SubmissionDraft = z.infer<typeof SubmissionDraftSchema>;
-export type SubmissionDrafts = z.infer<typeof SubmissionDraftsSchema>;
-export type ResponseHistoryQuery = z.infer<typeof ResponseHistoryQuerySchema>;
 export type ProgressSourceDocument = z.infer<typeof ProgressSourceDocumentSchema>;
 export type ProgressHistoryItem = z.infer<typeof ProgressHistoryItemSchema>;
 export type ScoreTrendPoint = z.infer<typeof ScoreTrendPointSchema>;
-export type ResponsesHistoryResponse = z.infer<typeof ResponsesHistoryResponseSchema>;
