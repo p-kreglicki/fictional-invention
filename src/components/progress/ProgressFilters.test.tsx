@@ -5,6 +5,8 @@ import { page } from 'vitest/browser';
 import messages from '@/locales/en.json';
 import { ProgressFilters } from './ProgressFilters';
 
+const progressMessages = messages.DashboardProgressPage;
+
 describe('ProgressFilters', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -32,7 +34,8 @@ describe('ProgressFilters', () => {
       </NextIntlClientProvider>,
     );
 
-    await page.getByRole('combobox', { name: 'Filter by document' }).selectOptions('550e8400-e29b-41d4-a716-446655440011');
+    await page.getByRole('combobox', { name: progressMessages.filter_document_label })
+      .selectOptions('550e8400-e29b-41d4-a716-446655440011');
 
     expect(onDocumentChange).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440011');
   });
