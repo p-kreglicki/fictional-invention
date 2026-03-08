@@ -5,6 +5,8 @@ import { page } from 'vitest/browser';
 import messages from '@/locales/en.json';
 import { DocumentUploadPanel } from './DocumentUploadPanel';
 
+const contentMessages = messages.DashboardContentPage;
+
 describe('DocumentUploadPanel', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -24,9 +26,9 @@ describe('DocumentUploadPanel', () => {
       </NextIntlClientProvider>,
     );
 
-    await page.getByRole('button', { name: 'Upload document' }).click();
+    await page.getByRole('button', { name: contentMessages.upload_submit }).click();
 
-    await expect.element(page.getByText('Choose a PDF file before uploading.')).toBeInTheDocument();
+    await expect.element(page.getByText(contentMessages.pdf_missing_file)).toBeInTheDocument();
   });
 
   it('switches to URL mode and renders the URL field', async () => {
@@ -43,8 +45,8 @@ describe('DocumentUploadPanel', () => {
       </NextIntlClientProvider>,
     );
 
-    await page.getByRole('button', { name: 'URL' }).click();
+    await page.getByRole('button', { name: contentMessages.upload_mode_url }).click();
 
-    await expect.element(page.getByRole('textbox', { name: 'HTTPS URL' })).toBeInTheDocument();
+    await expect.element(page.getByRole('textbox', { name: contentMessages.url_label })).toBeInTheDocument();
   });
 });

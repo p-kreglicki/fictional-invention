@@ -5,7 +5,6 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { createPollingGate } from '@/components/exercises/PollingGate';
-import { Link } from '@/libs/I18nNavigation';
 import { DocumentListItemSchema } from '@/validations/DocumentValidation';
 import { DeleteDocumentDialog } from './DeleteDocumentDialog';
 import { DocumentsLibrary } from './DocumentsLibrary';
@@ -247,33 +246,8 @@ export function DocumentsWorkspace() {
     }
   }
 
-  const readyDocumentsCount = documents.filter(document => document.status === 'ready').length;
-
   return (
     <div className="space-y-6 py-6">
-      <section className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-        <p className="text-sm font-medium tracking-[0.18em] text-slate-500 uppercase">
-          {t('eyebrow')}
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">{t('title')}</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{t('description')}</p>
-
-        <div className="mt-5 flex flex-wrap gap-3">
-          <Link
-            href="/dashboard/exercises/"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            {readyDocumentsCount > 0 ? t('primary_cta_ready') : t('primary_cta_waiting')}
-          </Link>
-          <Link
-            href="/dashboard/progress/"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
-          >
-            {t('secondary_cta')}
-          </Link>
-        </div>
-      </section>
-
       <DocumentUploadPanel
         errorMessage={errorMessage}
         isSubmitting={isUploading}

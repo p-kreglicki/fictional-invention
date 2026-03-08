@@ -8,7 +8,7 @@
     "sign_up_link": "Sign up"
   },
   "BaseTemplate": {
-    "description": "Starter code for your Nextjs Boilerplate with Tailwind CSS",
+    "description": "Your personal Italian language learning tool",
     "footer_text": "© {year} {name}. Made with <author></author>."
   },
   "Index": {
@@ -60,16 +60,16 @@
   },
   "DashboardOverviewPage": {
     "meta_title": "Overview",
-    "eyebrow": "Study workspace",
-    "title": "Turn your material into practice",
-    "description": "Upload study material, generate exercises from ready documents, and track how your recent answers are improving.",
+    "eyebrow": "",
+    "title": "Turn your learning materials into exercises",
+    "description": "Upload study material, create exercises from ready documents, and improve your language skills.",
     "loading": "Loading dashboard overview...",
     "summary_error": "Unable to load dashboard overview.",
     "content_cta": "Add content",
     "exercises_cta": "Practice now",
     "progress_cta": "Review progress",
-    "documents_card_label": "Documents",
-    "documents_ready": "Ready",
+    "documents_card_label": "Uploads",
+    "documents_ready": "Completed",
     "documents_processing": "In progress",
     "documents_failed": "Failed",
     "jobs_card_label": "Active jobs",
@@ -89,10 +89,10 @@
   },
   "DashboardLayout": {
     "dashboard_link": "Dashboard",
-    "content_link": "Content",
-    "user_profile_link": "Manage your account",
+    "content_link": "Content Library",
     "exercises_link": "Exercises",
     "progress_link": "Progress",
+    "user_profile_link": "Account",
     "sign_out": "Sign out"
   },
   "DashboardExercisesPage": {
@@ -164,7 +164,7 @@
     "state_partial_failed": "{count, plural, one {# document still needs attention because it failed.} other {# documents still need attention because they failed.}}"
   },
   "DashboardContentPage": {
-    "meta_title": "Content",
+    "meta_title": "Content Library",
     "eyebrow": "Content library",
     "title": "Prepare your study material",
     "description": "Upload PDFs, save URLs, or paste text. Documents stay here while they process, fail, or become ready for exercise generation.",
@@ -174,8 +174,8 @@
     "loading": "Loading content workspace...",
     "bootstrap_error": "Unable to load documents.",
     "polling_error": "Unable to refresh document status.",
-    "upload_title": "Add a document",
-    "upload_description": "Choose the format that matches your study material. New uploads appear in the library below as soon as the API accepts them.",
+    "upload_title": "Add your langauage study resources",
+    "upload_description": "Upload PDFs, add URLs or paste text with your language study resources.",
     "upload_mode_group_label": "Upload mode",
     "upload_mode_pdf": "PDF",
     "upload_mode_url": "URL",
@@ -186,11 +186,11 @@
     "pdf_label": "PDF file",
     "pdf_help": "Upload one PDF up to 10 MB.",
     "selected_file": "Selected file",
-    "url_label": "HTTPS URL",
+    "url_label": "URL Address",
     "text_label": "Paste text",
-    "text_placeholder": "Paste at least 100 characters of Italian study material.",
+    "text_placeholder": "Paste text that has at least 100 characters.",
     "pdf_missing_file": "Choose a PDF file before uploading.",
-    "url_missing_value": "Enter a URL before uploading.",
+    "url_missing_value": "Enter a URL.",
     "text_missing_value": "Add a title and enough text before uploading.",
     "upload_validation_error": "Please check the upload fields and try again.",
     "upload_error": "Unable to upload the document.",

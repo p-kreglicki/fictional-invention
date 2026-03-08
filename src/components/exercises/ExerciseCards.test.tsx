@@ -8,6 +8,8 @@ import { page } from 'vitest/browser';
 import messages from '@/locales/en.json';
 import { ExerciseCards } from './ExerciseCards';
 
+const exerciseMessages = messages.DashboardExercisesPage;
+
 function createExercise(): Extract<ExerciseCardItem, { type: 'multiple_choice' }> {
   return {
     id: '550e8400-e29b-41d4-a716-446655440010',
@@ -104,16 +106,16 @@ describe('ExerciseCards', () => {
 
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
-    await expect.element(page.getByText('Choose correct answer')).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.choose_correct_answer_label)).toBeInTheDocument();
     await expect.element(page.getByText('Single choice')).not.toBeInTheDocument();
 
     await page.getByRole('radio').nth(0).click();
-    await page.getByRole('button', { name: 'Submit answer' }).click();
+    await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
-    await expect.element(page.getByText('Latest feedback')).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
     await expect.element(page.getByText('Score: 100/100')).toBeInTheDocument();
-    await expect.element(page.getByText('Attempts')).not.toBeInTheDocument();
-    await expect.element(page.getByText('Average score')).not.toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.attempts_label)).not.toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.average_score_label)).not.toBeInTheDocument();
   });
 
   it('renders duplicate multiple-choice labels without emitting a key warning', async () => {
@@ -148,9 +150,9 @@ describe('ExerciseCards', () => {
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
     await page.getByRole('radio').nth(0).click();
-    await page.getByRole('button', { name: 'Submit answer' }).click();
+    await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
-    const button = page.getByRole('button', { name: 'Checking...' });
+    const button = page.getByRole('button', { name: exerciseMessages.submit_answer_loading });
 
     await expect.element(button).toBeDisabled();
 
@@ -165,7 +167,7 @@ describe('ExerciseCards', () => {
       },
     }));
 
-    await expect.element(page.getByText('Latest feedback')).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
   });
 
   it('reuses the submission id when retrying the same answer', async () => {
@@ -181,13 +183,13 @@ describe('ExerciseCards', () => {
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
     await page.getByRole('radio').nth(0).click();
-    await page.getByRole('button', { name: 'Submit answer' }).click();
+    await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     await expect.element(page.getByText('network failed')).toBeInTheDocument();
 
-    await page.getByRole('button', { name: 'Submit answer' }).click();
+    await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
-    await expect.element(page.getByText('Latest feedback')).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
 
     const firstRequest = fetchSpy.mock.calls[0]?.[1];
     const secondRequest = fetchSpy.mock.calls[1]?.[1];
@@ -225,7 +227,7 @@ describe('ExerciseCards', () => {
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
     await page.getByRole('radio').nth(0).click();
-    await page.getByRole('button', { name: 'Submit answer' }).click();
+    await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     const request = fetchSpy.mock.calls[0]?.[1];
 
@@ -252,10 +254,10 @@ describe('ExerciseCards', () => {
     await render(<ExerciseCardsHarness exercise={createExercise()} useStrictMode />);
 
     await page.getByRole('radio').nth(0).click();
-    await page.getByRole('button', { name: 'Submit answer' }).click();
+    await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
-    await expect.element(page.getByText('Latest feedback')).toBeInTheDocument();
-    await expect.element(page.getByRole('button', { name: 'Submit answer' })).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
+    await expect.element(page.getByRole('button', { name: exerciseMessages.submit_answer_button })).toBeInTheDocument();
   });
 
   it('refreshes one exercise when a 200 payload is malformed', async () => {
@@ -281,10 +283,10 @@ describe('ExerciseCards', () => {
     );
 
     await page.getByRole('radio').nth(0).click();
-    await page.getByRole('button', { name: 'Submit answer' }).click();
+    await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     await expect.element(page.getByText('Recovered from refresh.')).toBeInTheDocument();
-    await expect.element(page.getByRole('button', { name: 'Submit answer' })).toBeInTheDocument();
+    await expect.element(page.getByRole('button', { name: exerciseMessages.submit_answer_button })).toBeInTheDocument();
     expect(onExerciseSyncRequested).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440010');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
