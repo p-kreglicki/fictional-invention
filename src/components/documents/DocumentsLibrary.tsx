@@ -59,26 +59,24 @@ export function DocumentsLibrary(props: DocumentsLibraryProps) {
                 </div>
 
                 <dl className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
-                  <div>
-                    <dt className="font-medium text-slate-900">{t('created_at_label')}</dt>
-                    <dd>{new Date(document.createdAt).toLocaleString()}</dd>
-                  </div>
                   {document.processedAt && (
                     <div>
-                      <dt className="font-medium text-slate-900">{t('processed_at_label')}</dt>
-                      <dd>{new Date(document.processedAt).toLocaleString()}</dd>
-                    </div>
-                  )}
-                  {document.chunkCount !== null && document.status === 'ready' && (
-                    <div>
-                      <dt className="font-medium text-slate-900">{t('chunk_count_label')}</dt>
-                      <dd>{document.chunkCount}</dd>
+                      <span className="font-medium text-slate-900">
+                        {t('processed_at_label')}
+                        :
+                        {' '}
+                      </span>
+                      <span>{new Date(document.processedAt).toLocaleString()}</span>
                     </div>
                   )}
                   {document.originalFilename && (
                     <div>
-                      <dt className="font-medium text-slate-900">{t('filename_label')}</dt>
-                      <dd className="break-all">{document.originalFilename}</dd>
+                      <span className="font-medium text-slate-900">
+                        {t('filename_label')}
+                        :
+                        {' '}
+                      </span>
+                      <span className="break-all">{document.originalFilename}</span>
                     </div>
                   )}
                   {document.sourceUrl && (
