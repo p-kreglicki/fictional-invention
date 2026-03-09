@@ -12,6 +12,15 @@ type DocumentsLibraryProps = {
   variant?: 'full' | 'compact';
 };
 
+function isSafeUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 function getStatusClasses(status: DocumentListItem['status']) {
   switch (status) {
     case 'ready':
@@ -141,9 +150,13 @@ export function DocumentsLibrary(props: DocumentsLibraryProps) {
                           <div className="md:col-span-2">
                             <dt className="font-medium text-slate-900">{t('source_url_label')}</dt>
                             <dd className="break-all">
-                              <a className="text-blue-700 hover:text-blue-800" href={document.sourceUrl} rel="noreferrer" target="_blank">
-                                {document.sourceUrl}
-                              </a>
+                              {isSafeUrl(document.sourceUrl)
+                                ? (
+                                    <a className="text-blue-700 hover:text-blue-800" href={document.sourceUrl} rel="noreferrer" target="_blank">
+                                      {document.sourceUrl}
+                                    </a>
+                                  )
+                                : document.sourceUrl}
                             </dd>
                           </div>
                         )}
