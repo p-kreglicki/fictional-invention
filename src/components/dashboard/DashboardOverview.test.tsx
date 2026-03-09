@@ -1,18 +1,9 @@
-import type { ComponentPropsWithoutRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import messages from '@/locales/en.json';
 import { TestProviders } from '@/test/TestProviders';
 import { DashboardOverview } from './DashboardOverview';
-
-vi.mock('@/libs/I18nNavigation', () => ({
-  Link: ({ children, href, ...props }: ComponentPropsWithoutRef<'a'> & { href: string }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
 
 const overviewMessages = messages.DashboardOverviewPage;
 const contentMessages = messages.DashboardContentPage;
