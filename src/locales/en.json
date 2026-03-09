@@ -11,9 +11,14 @@
     "description": "Your personal Italian language learning tool",
     "footer_text": "© {year} {name}. Made with <author></author>."
   },
+  "AuthLayout": {
+    "title": "Learn from your own material",
+    "description": "Upload notes, articles, and study texts. Turn them into targeted exercises without leaving your workspace."
+  },
   "Index": {
     "meta_title": "Next.js Boilerplate Presentation",
     "meta_description": "Next js Boilerplate is the perfect starter code for your project. Build your React application with the Next.js framework.",
+    "hero_title": "Boilerplate Code for Your Next.js Project with Tailwind CSS",
     "sponsors_title": "Sponsors"
   },
   "Counter": {
@@ -60,35 +65,17 @@
   },
   "DashboardOverviewPage": {
     "meta_title": "Overview",
-    "eyebrow": "",
     "title": "Turn your learning materials into exercises",
     "description": "Upload study material, create exercises from ready documents, and improve your language skills.",
-    "loading": "Loading dashboard overview...",
-    "summary_error": "Unable to load dashboard overview.",
     "content_cta": "Add content",
     "exercises_cta": "Practice now",
     "progress_cta": "Review progress",
-    "documents_card_label": "Uploads",
-    "documents_ready": "Completed",
-    "documents_processing": "In progress",
-    "documents_failed": "Failed",
-    "jobs_card_label": "Active jobs",
-    "jobs_card_description": "Generation jobs stay visible here while new exercises are being prepared.",
-    "score_card_label": "Recent average score",
-    "score_card_description": "Average score across your 20 most recent responses.",
-    "score_empty": "No scores yet",
     "content_modal_title": "Add study resources",
     "content_modal_description": "Upload a PDF, add a URL, or paste text without leaving the dashboard.",
     "content_modal_recent_title": "Recent uploads",
     "content_modal_recent_description": "Resources uploaded in this session appear here as soon as the API accepts them.",
     "content_modal_recent_empty": "Uploads from this session will appear here.",
-    "content_modal_close": "Close",
-    "step_content_title": "1. Prepare content",
-    "step_content_description": "Upload a PDF, save a URL, or paste text so the workspace has searchable study material.",
-    "step_exercises_title": "2. Generate exercises",
-    "step_exercises_description": "Pick ready documents, choose an exercise type, and keep answering from one focused practice page.",
-    "step_progress_title": "3. Review progress",
-    "step_progress_description": "Check recent attempts, filter by document, and watch short-term score movement."
+    "content_modal_close": "Close"
   },
   "UserProfile": {
     "meta_title": "User Profile"

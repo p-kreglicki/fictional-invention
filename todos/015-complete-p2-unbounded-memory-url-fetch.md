@@ -1,5 +1,5 @@
 ---
-status: completed
+status: complete
 priority: p2
 issue_id: "015"
 tags: [code-review, performance, memory, security]

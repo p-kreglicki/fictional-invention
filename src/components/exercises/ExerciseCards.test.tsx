@@ -109,7 +109,7 @@ describe('ExerciseCards', () => {
     await expect.element(page.getByText(exerciseMessages.choose_correct_answer_label)).toBeInTheDocument();
     await expect.element(page.getByText('Single choice')).not.toBeInTheDocument();
 
-    await page.getByRole('radio').nth(0).click();
+    await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
@@ -131,8 +131,8 @@ describe('ExerciseCards', () => {
       />,
     );
 
-    await expect.element(page.getByRole('radio').nth(0)).toBeInTheDocument();
-    await expect.element(page.getByRole('radio').nth(1)).toBeInTheDocument();
+    await expect.element(page.getByText('andava', { exact: true }).nth(0)).toBeInTheDocument();
+    await expect.element(page.getByText('andava', { exact: true }).nth(1)).toBeInTheDocument();
 
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(
       expect.stringContaining('Encountered two children with the same key'),
@@ -149,7 +149,7 @@ describe('ExerciseCards', () => {
 
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
-    await page.getByRole('radio').nth(0).click();
+    await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     const button = page.getByRole('button', { name: exerciseMessages.submit_answer_loading });
@@ -182,7 +182,7 @@ describe('ExerciseCards', () => {
 
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
-    await page.getByRole('radio').nth(0).click();
+    await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     await expect.element(page.getByText('network failed')).toBeInTheDocument();
@@ -226,7 +226,7 @@ describe('ExerciseCards', () => {
 
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
-    await page.getByRole('radio').nth(0).click();
+    await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     const request = fetchSpy.mock.calls[0]?.[1];
@@ -253,7 +253,7 @@ describe('ExerciseCards', () => {
 
     await render(<ExerciseCardsHarness exercise={createExercise()} useStrictMode />);
 
-    await page.getByRole('radio').nth(0).click();
+    await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
@@ -282,7 +282,7 @@ describe('ExerciseCards', () => {
       />,
     );
 
-    await page.getByRole('radio').nth(0).click();
+    await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
     await expect.element(page.getByText('Recovered from refresh.')).toBeInTheDocument();

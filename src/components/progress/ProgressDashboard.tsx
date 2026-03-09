@@ -5,8 +5,10 @@ import type {
   ProgressSourceDocument,
   ScoreTrendPoint,
 } from '@/validations/ResponseValidation';
+import { ArrowRight, FileSearch03, TrendUp02 } from '@untitledui/icons';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
+import { buttonStyles, eyebrowStyles, panelStyles } from '@/components/ui/styles';
 import { Link } from '@/libs/I18nNavigation';
 import { ResponsesHistoryResponseSchema } from '@/validations/ResponseValidation';
 import { ProgressFilters } from './ProgressFilters';
@@ -123,23 +125,42 @@ export function ProgressDashboard() {
 
   return (
     <div className="space-y-6 py-6">
-      <section className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-        <p className="text-sm font-medium tracking-[0.18em] text-slate-500 uppercase">
+      <section className={panelStyles({ tone: 'strong' })}>
+        <p className={eyebrowStyles()}>
           {t('eyebrow')}
         </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">{t('title')}</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{t('description')}</p>
+        <div className="mt-4 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <h1 className="text-3xl font-semibold text-ink-950 sm:text-4xl">{t('title')}</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-ink-600">{t('description')}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <article className="rounded-[1.5rem] border border-white/90 bg-white/80 p-4 shadow-xs">
+              <TrendUp02 className="h-5 w-5 text-brand-600" />
+              <p className="mt-4 text-xs font-semibold tracking-[0.18em] text-ink-500 uppercase">
+                {t('trend_title')}
+              </p>
+            </article>
+            <article className="rounded-[1.5rem] border border-white/90 bg-white/80 p-4 shadow-xs">
+              <FileSearch03 className="h-5 w-5 text-brand-600" />
+              <p className="mt-4 text-xs font-semibold tracking-[0.18em] text-ink-500 uppercase">
+                {t('history_title')}
+              </p>
+            </article>
+          </div>
+        </div>
 
         <div className="mt-5 flex flex-wrap gap-3">
           <Link
             href="/dashboard/exercises/"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+            className={buttonStyles({ tone: 'primary' })}
           >
             {t('primary_cta')}
+            <ArrowRight className="h-4 w-4" />
           </Link>
           <Link
             href="/dashboard/content/"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+            className={buttonStyles()}
           >
             {t('secondary_cta')}
           </Link>
@@ -153,13 +174,13 @@ export function ProgressDashboard() {
       />
 
       {isLoading && (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+        <section className={panelStyles({ className: 'text-sm text-ink-600' })}>
           {t('loading')}
         </section>
       )}
 
       {!isLoading && errorMessage && (
-        <section className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+        <section className={panelStyles({ className: 'border-error-100 bg-error-50 text-sm text-error-700' })}>
           {errorMessage}
         </section>
       )}

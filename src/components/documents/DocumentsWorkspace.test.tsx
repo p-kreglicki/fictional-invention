@@ -94,14 +94,12 @@ describe('DocumentsWorkspace', () => {
 
     await expect.element(page.getByText('Lesson notes')).toBeInTheDocument();
 
-    await page.getByRole('button', { name: contentMessages.upload_mode_url }).click();
-    await page.getByRole('textbox', { name: contentMessages.title_label }).fill('Fresh article');
+    await page.getByText(contentMessages.upload_mode_url, { exact: true }).click();
     await page.getByRole('textbox', { name: contentMessages.url_label }).fill('https://example.com/article');
     await page.getByRole('button', { name: contentMessages.upload_submit }).click();
 
     await expect.element(page.getByText(contentMessages.upload_accepted)).toBeInTheDocument();
     await expect.element(page.getByText('Fresh article')).toBeInTheDocument();
-    await expect.element(page.getByRole('textbox', { name: contentMessages.title_label })).toHaveValue('');
     await expect.element(page.getByRole('textbox', { name: contentMessages.url_label })).toHaveValue('');
   });
 

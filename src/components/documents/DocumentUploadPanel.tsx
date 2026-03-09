@@ -1,7 +1,14 @@
 'use client';
 
+import { UploadCloud02 } from '@untitledui/icons';
 import { useTranslations } from 'next-intl';
 import { useEffect, useReducer } from 'react';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { fieldLabelStyles, panelStyles, textareaStyles } from '@/components/ui/styles';
+import { FileUploadDropZone } from '@/components/untitled/application/file-upload/file-upload-base';
+import { ButtonGroup, ButtonGroupItem } from '@/components/untitled/base/button-group/button-group';
+import { cn } from '@/utils/cn';
 
 type UploadMode = 'pdf' | 'url' | 'text';
 
@@ -10,7 +17,7 @@ type DocumentUploadPanelProps = {
   statusMessage: string | null;
   errorMessage: string | null;
   resetKey?: number;
-  variant?: 'page' | 'modal';
+  variant?: 'page' | 'modal' | 'dashboard';
   onSubmitPdf: (input: { file: File; title: string }) => Promise<void>;
   onSubmitUrl: (input: { url: string; title: string }) => Promise<void>;
   onSubmitText: (input: { title: string; content: string }) => Promise<void>;
@@ -93,30 +100,11 @@ function uploadFormReducer(state: UploadFormState, action: UploadFormAction): Up
   }
 }
 
-function UploadModeButton(props: {
-  label: string;
-  isActive: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-        props.isActive
-          ? 'bg-slate-900 text-white'
-          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-      }`}
-      onClick={props.onClick}
-      type="button"
-    >
-      {props.label}
-    </button>
-  );
-}
-
 export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
   const t = useTranslations('DashboardContentPage');
   const [state, dispatch] = useReducer(uploadFormReducer, undefined, createInitialUploadFormState);
   const isModal = props.variant === 'modal';
+  const isDashboard = props.variant === 'dashboard';
 
   useEffect(() => {
     dispatch({ type: 'reset_form' });
@@ -163,96 +151,130 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
     });
   }
 
+  function renderUploadModeGroup() {
+    return (
+      <ButtonGroup
+        aria-label={t('upload_mode_group_label')}
+        className="shadow-none"
+        selectedKeys={[state.mode]}
+        onSelectionChange={(value) => {
+          const nextMode = Array.from(value)[0];
+
+          if (typeof nextMode !== 'string') {
+            return;
+          }
+
+          dispatch({ type: 'set_mode', mode: nextMode as UploadMode });
+        }}
+      >
+        <ButtonGroupItem id="pdf">{t('upload_mode_pdf')}</ButtonGroupItem>
+        <ButtonGroupItem id="url">{t('upload_mode_url')}</ButtonGroupItem>
+        <ButtonGroupItem id="text">{t('upload_mode_text')}</ButtonGroupItem>
+      </ButtonGroup>
+    );
+  }
+
   return (
-    <section className={isModal ? '' : 'rounded-xl border border-slate-200 bg-white p-5'}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className={cn(
+      isModal && '',
+      props.variant === 'page' && panelStyles({ tone: 'strong' }),
+      isDashboard && 'overflow-hidden rounded-lg border border-ink-200 bg-white shadow-xs',
+    )}
+    >
+      <div className={cn('flex flex-col gap-4', isDashboard && 'px-6 py-6 sm:px-7')}>
         {!isModal && (
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">{t('upload_title')}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{t('upload_description')}</p>
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'rounded-2xl p-3 text-brand-600 shadow-xs',
+                isDashboard ? 'rounded-md bg-brand-50 ring-1 ring-brand-100' : 'bg-white',
+              )}
+              >
+                <UploadCloud02 className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-ink-950">{t('upload_title')}</h2>
+                <p className="mt-2 text-sm leading-6 text-ink-600">{t('upload_description')}</p>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              {renderUploadModeGroup()}
+            </div>
           </div>
         )}
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('upload_mode_group_label')}>
-          <UploadModeButton
-            label={t('upload_mode_pdf')}
-            isActive={state.mode === 'pdf'}
-            onClick={() => {
-              dispatch({ type: 'set_mode', mode: 'pdf' });
-            }}
-          />
-          <UploadModeButton
-            label={t('upload_mode_url')}
-            isActive={state.mode === 'url'}
-            onClick={() => {
-              dispatch({ type: 'set_mode', mode: 'url' });
-            }}
-          />
-          <UploadModeButton
-            label={t('upload_mode_text')}
-            isActive={state.mode === 'text'}
-            onClick={() => {
-              dispatch({ type: 'set_mode', mode: 'text' });
-            }}
-          />
-        </div>
+
+        {isModal && (
+          renderUploadModeGroup()
+        )}
       </div>
 
-      <form className={isModal ? 'mt-4 space-y-4' : 'mt-5 space-y-4'} onSubmit={handleSubmit}>
-        <label className="block text-sm text-slate-700">
-          <span className="mb-1 block font-medium">{t('title_label')}</span>
-          <input
-            className="w-full rounded-md border border-slate-300 px-3 py-2"
+      <form className={cn(isModal ? 'mt-4 space-y-4' : 'mt-6 space-y-5', isDashboard && 'border-t border-ink-100 px-6 py-6 sm:px-7')} onSubmit={handleSubmit}>
+        {state.mode === 'text' && (
+          <Input
+            label={t('title_label')}
             maxLength={200}
-            onChange={event => dispatch({ type: 'set_title', value: event.target.value })}
-            placeholder={state.mode === 'text' ? t('text_title_placeholder') : t('title_placeholder')}
+            onChange={value => dispatch({ type: 'set_title', value })}
+            placeholder={t('text_title_placeholder')}
             type="text"
             value={state.title}
           />
-        </label>
+        )}
 
         {state.mode === 'pdf' && (
-          <label className="block rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-700">
-            <span className="mb-2 block font-medium text-slate-900">{t('pdf_label')}</span>
-            <span className="mb-3 block text-sm leading-6 text-slate-600">{t('pdf_help')}</span>
-            <input
-              accept="application/pdf"
-              className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
+          <div className="space-y-4">
+            <FileUploadDropZone
               key={state.fileInputKey}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                dispatch({ type: 'set_selected_file', file });
+              accept="application/pdf,.pdf"
+              allowsMultiple={false}
+              className={cn(
+                isDashboard && 'rounded-lg border border-dashed border-ink-300 bg-ink-25/80 px-8 py-10',
+              )}
+              hint={t('pdf_help')}
+              maxSize={10 * 1024 * 1024}
+              onDropFiles={(files) => {
+                dispatch({ type: 'set_client_error', value: null });
+                dispatch({ type: 'set_selected_file', file: files[0] ?? null });
               }}
-              type="file"
+              onDropUnacceptedFiles={() => {
+                dispatch({ type: 'set_client_error', value: t('upload_validation_error') });
+                dispatch({ type: 'set_selected_file', file: null });
+              }}
+              onSizeLimitExceed={() => {
+                dispatch({ type: 'set_client_error', value: t('upload_validation_error') });
+                dispatch({ type: 'set_selected_file', file: null });
+              }}
             />
             {state.selectedFile && (
-              <p className="mt-3 text-sm text-slate-600">
+              <p className={cn(
+                'mt-4 rounded-lg bg-brand-25 px-4 py-3 text-sm text-ink-600',
+                isDashboard && 'mx-auto max-w-sm text-center',
+              )}
+              >
                 {t('selected_file')}
                 :
                 {' '}
                 {state.selectedFile.name}
               </p>
             )}
-          </label>
+          </div>
         )}
 
         {state.mode === 'url' && (
-          <label className="block text-sm text-slate-700">
-            <span className="mb-1 block font-medium">{t('url_label')}</span>
-            <input
-              className="w-full rounded-md border border-slate-300 px-3 py-2"
-              onChange={event => dispatch({ type: 'set_url', value: event.target.value })}
-              placeholder="https://example.com/article"
-              type="url"
-              value={state.url}
-            />
-          </label>
+          <Input
+            label={t('url_label')}
+            onChange={value => dispatch({ type: 'set_url', value })}
+            placeholder="https://example.com/article"
+            type="url"
+            value={state.url}
+          />
         )}
 
         {state.mode === 'text' && (
-          <label className="block text-sm text-slate-700">
-            <span className="mb-1 block font-medium">{t('text_label')}</span>
+          <label className="block text-sm text-ink-700">
+            <span className={fieldLabelStyles()}>{t('text_label')}</span>
             <textarea
-              className="min-h-40 w-full rounded-md border border-slate-300 px-3 py-2"
+              className={textareaStyles()}
               maxLength={100000}
               onChange={event => dispatch({ type: 'set_text_content', value: event.target.value })}
               placeholder={t('text_placeholder')}
@@ -262,24 +284,22 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
         )}
 
         {(state.clientError || props.errorMessage) && (
-          <p className="text-sm text-red-600" role="alert">
+          <p className="rounded-2xl border border-error-100 bg-error-50 px-4 py-3 text-sm text-error-700" role="alert">
             {state.clientError ?? props.errorMessage}
           </p>
         )}
 
         {props.statusMessage && (
-          <p className="text-sm text-slate-600" aria-live="polite">
+          <p className="rounded-2xl border border-success-100 bg-success-50 px-4 py-3 text-sm text-success-700" aria-live="polite">
             {props.statusMessage}
           </p>
         )}
 
-        <button
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={props.isSubmitting}
-          type="submit"
-        >
-          {props.isSubmitting ? t('upload_loading') : t('upload_submit')}
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Button disabled={props.isSubmitting} type="submit" variant="primary">
+            {props.isSubmitting ? t('upload_loading') : t('upload_submit')}
+          </Button>
+        </div>
       </form>
     </section>
   );

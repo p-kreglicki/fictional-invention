@@ -1,7 +1,5 @@
-import { SignOutButton } from '@clerk/nextjs';
-import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { LocaleSwitcher } from '@/components/LocaleSwitcher';
-import { Link } from '@/libs/I18nNavigation';
+import { setRequestLocale } from 'next-intl/server';
+import { DashboardSidebarNav } from '@/components/dashboard/DashboardSidebarNav';
 import { BaseTemplate } from '@/templates/BaseTemplate';
 
 export default async function DashboardLayout(props: {
@@ -10,72 +8,11 @@ export default async function DashboardLayout(props: {
 }) {
   const { locale } = await props.params;
   setRequestLocale(locale);
-  const t = await getTranslations({
-    locale,
-    namespace: 'DashboardLayout',
-  });
 
   return (
     <BaseTemplate
-      leftNav={(
-        <>
-          <li>
-            <Link
-              href="/dashboard/"
-              className="border-none text-gray-700 hover:text-gray-900"
-            >
-              {t('dashboard_link')}
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/dashboard/content/"
-              className="border-none text-gray-700 hover:text-gray-900"
-            >
-              {t('content_link')}
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/dashboard/user-profile/"
-              className="border-none text-gray-700 hover:text-gray-900"
-            >
-              {t('user_profile_link')}
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/dashboard/exercises/"
-              className="border-none text-gray-700 hover:text-gray-900"
-            >
-              {t('exercises_link')}
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/dashboard/progress/"
-              className="border-none text-gray-700 hover:text-gray-900"
-            >
-              {t('progress_link')}
-            </Link>
-          </li>
-        </>
-      )}
-      rightNav={(
-        <>
-          <li>
-            <SignOutButton>
-              <button className="border-none text-gray-700 hover:text-gray-900" type="button">
-                {t('sign_out')}
-              </button>
-            </SignOutButton>
-          </li>
-
-          <li>
-            <LocaleSwitcher />
-          </li>
-        </>
-      )}
+      variant="dashboard"
+      leftNav={<DashboardSidebarNav />}
     >
       {props.children}
     </BaseTemplate>

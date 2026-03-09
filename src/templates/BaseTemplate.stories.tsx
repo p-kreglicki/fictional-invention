@@ -1,6 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
-import { NextIntlClientProvider } from 'next-intl';
-import messages from '@/locales/en.json';
 import { BaseTemplate } from './BaseTemplate';
 
 const meta = {
@@ -9,13 +7,6 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
   },
-  decorators: [
-    Story => (
-      <NextIntlClientProvider locale="en" messages={messages}>
-        <Story />
-      </NextIntlClientProvider>
-    ),
-  ],
 } satisfies Meta<typeof BaseTemplate>;
 
 export default meta;

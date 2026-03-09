@@ -9,7 +9,8 @@ test.describe('I18n', () => {
         page.getByRole('heading', { name: 'Boilerplate Code for Your Next.js Project with Tailwind CSS' }),
       ).toBeVisible();
 
-      await page.getByLabel('Change language').selectOption('fr');
+      await page.getByRole('button', { name: 'Change language' }).click();
+      await page.getByRole('option', { name: 'French' }).click();
 
       await expect(
         page.getByRole('heading', { name: 'Code de démarrage pour Next.js avec Tailwind CSS' }),

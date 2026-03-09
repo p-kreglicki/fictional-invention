@@ -1,9 +1,9 @@
-import { NextIntlClientProvider } from 'next-intl';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import messages from '@/locales/en.json';
+import { TestProviders } from '@/test/TestProviders';
 import { DocumentUploadPanel } from './DocumentUploadPanel';
 
 const contentMessages = messages.DashboardContentPage;
@@ -38,7 +38,7 @@ describe('DocumentUploadPanel', () => {
 
   it('shows a client error when submitting PDF mode without a file', async () => {
     await render(
-      <NextIntlClientProvider locale="en" messages={messages}>
+      <TestProviders>
         <DocumentUploadPanel
           errorMessage={null}
           isSubmitting={false}
@@ -47,7 +47,7 @@ describe('DocumentUploadPanel', () => {
           onSubmitUrl={vi.fn()}
           statusMessage={null}
         />
-      </NextIntlClientProvider>,
+      </TestProviders>,
     );
 
     await page.getByRole('button', { name: contentMessages.upload_submit }).click();
@@ -57,7 +57,7 @@ describe('DocumentUploadPanel', () => {
 
   it('switches to URL mode and renders the URL field', async () => {
     await render(
-      <NextIntlClientProvider locale="en" messages={messages}>
+      <TestProviders>
         <DocumentUploadPanel
           errorMessage={null}
           isSubmitting={false}
@@ -66,30 +66,29 @@ describe('DocumentUploadPanel', () => {
           onSubmitUrl={vi.fn()}
           statusMessage={null}
         />
-      </NextIntlClientProvider>,
+      </TestProviders>,
     );
 
-    await page.getByRole('button', { name: contentMessages.upload_mode_url }).click();
+    await page.getByText(contentMessages.upload_mode_url, { exact: true }).click();
 
     await expect.element(page.getByRole('textbox', { name: contentMessages.url_label })).toBeInTheDocument();
+    await expect.element(page.getByRole('textbox', { name: contentMessages.title_label })).not.toBeInTheDocument();
   });
 
   it('hides the page heading in modal mode and resets fields after success', async () => {
     await render(
-      <NextIntlClientProvider locale="en" messages={messages}>
+      <TestProviders>
         <DocumentUploadPanelHarness />
-      </NextIntlClientProvider>,
+      </TestProviders>,
     );
 
     await expect.element(page.getByText(contentMessages.upload_title)).not.toBeInTheDocument();
 
-    await page.getByRole('button', { name: contentMessages.upload_mode_url }).click();
-    await page.getByRole('textbox', { name: contentMessages.title_label }).fill('Fresh article');
+    await page.getByText(contentMessages.upload_mode_url, { exact: true }).click();
     await page.getByRole('textbox', { name: contentMessages.url_label }).fill('https://example.com/article');
 
     await page.getByRole('button', { name: 'Reset form' }).click();
 
-    await expect.element(page.getByRole('textbox', { name: contentMessages.title_label })).toHaveValue('');
     await expect.element(page.getByRole('textbox', { name: contentMessages.url_label })).toHaveValue('');
   });
 });
