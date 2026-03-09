@@ -104,7 +104,6 @@ export function DashboardAddContentModal(props: DashboardAddContentModalProps) {
                 onDismissPdfUpload={documentsWorkspace.dismissPdfUpload}
                 onQueuePdfFiles={documentsWorkspace.queuePdfFiles}
                 onRetryPdfUpload={documentsWorkspace.retryPdfUpload}
-                onStartPdfUploads={documentsWorkspace.startPdfUploads}
                 isSubmitting={documentsWorkspace.isUploading}
                 pdfUploads={documentsWorkspace.pdfUploadItems}
                 onSubmitText={documentsWorkspace.submitText}

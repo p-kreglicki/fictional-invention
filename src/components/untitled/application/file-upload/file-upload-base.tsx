@@ -286,8 +286,7 @@ export type FileListItemProps = {
 
 function renderStatusIcon(statusIcon: NonNullable<FileListItemProps['statusIcon']>) {
   if (statusIcon === 'complete') {
-    // eslint-disable-next-line tailwindcss/classnames-order, tailwindcss/no-custom-classname
-    return <CheckCircle className="size-4 stroke-[2.5px] text-success-primary" />;
+    return <CheckCircle className="size-4 stroke-[2.5px] text-success-600" />;
   }
 
   if (statusIcon === 'failed') {
@@ -299,7 +298,7 @@ function renderStatusIcon(statusIcon: NonNullable<FileListItemProps['statusIcon'
 
 function getStatusToneClasses(statusIcon: NonNullable<FileListItemProps['statusIcon']>) {
   if (statusIcon === 'complete') {
-    return 'text-success-primary';
+    return 'text-success-600';
   }
 
   if (statusIcon === 'failed') {
@@ -307,6 +306,18 @@ function getStatusToneClasses(statusIcon: NonNullable<FileListItemProps['statusI
   }
 
   return 'text-quaternary';
+}
+
+function getProgressFillClasses(statusIcon: NonNullable<FileListItemProps['statusIcon']>) {
+  if (statusIcon === 'complete') {
+    return 'bg-success-600';
+  }
+
+  if (statusIcon === 'failed') {
+    return 'bg-error-600';
+  }
+
+  return undefined;
 }
 
 export const FileListItemProgressBar = ({
@@ -335,6 +346,7 @@ export const FileListItemProgressBar = ({
         ? 'Failed'
         : 'Uploading...');
   const shouldShowProgress = hideProgress !== undefined ? !hideProgress : !failed;
+  const progressClassName = getProgressFillClasses(resolvedStatusIcon);
 
   return (
     <motion.li
@@ -379,7 +391,7 @@ export const FileListItemProgressBar = ({
 
         {shouldShowProgress && (
           <div className="mt-1 w-full">
-            <ProgressBar labelPosition="right" max={100} min={0} value={progress} />
+            <ProgressBar labelPosition="right" max={100} min={0} progressClassName={progressClassName} value={progress} />
           </div>
         )}
 

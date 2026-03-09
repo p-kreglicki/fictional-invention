@@ -585,10 +585,18 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
       setPdfUploadItems(currentItems => currentItems.filter(item => item.id !== uploadId));
     },
     queuePdfFiles: (files: FileList | File[]) => {
+      const nextItems = Array.from(files);
+      if (nextItems.length === 0) {
+        return;
+      }
+
       setStatusMessage(null);
       setErrorMessage(null);
-      const nextItems = Array.from(files).map(createPdfUploadSessionItem);
-      setPdfUploadItems(currentItems => [...currentItems, ...nextItems]);
+      setPdfUploadItems(currentItems => [
+        ...currentItems,
+        ...nextItems.map(createPdfUploadSessionItem),
+      ]);
+      setIsPdfQueueRunning(true);
     },
     refreshDocuments,
     retryPdfUpload: async (uploadId: string) => {
@@ -639,11 +647,6 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
       setIsPdfQueueRunning(true);
     },
     setDocumentToDelete,
-    startPdfUploads: () => {
-      setStatusMessage(null);
-      setErrorMessage(null);
-      setIsPdfQueueRunning(true);
-    },
     submitText,
     submitUrl,
   };

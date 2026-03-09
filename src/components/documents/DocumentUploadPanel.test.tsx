@@ -1,4 +1,3 @@
-import type { PdfUploadSessionItem } from './useDocumentsWorkspace';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
@@ -8,20 +7,6 @@ import { TestProviders } from '@/test/TestProviders';
 import { DocumentUploadPanel } from './DocumentUploadPanel';
 
 const contentMessages = messages.DashboardContentPage;
-
-function createPdfUpload(input: Partial<PdfUploadSessionItem> = {}): PdfUploadSessionItem {
-  return {
-    id: 'upload-1',
-    documentId: null,
-    errorMessage: null,
-    file: new File(['pdf'], 'lesson-notes.pdf', { type: 'application/pdf' }),
-    name: 'lesson-notes.pdf',
-    phase: 'queued',
-    progress: 0,
-    size: 720 * 1024,
-    ...input,
-  };
-}
 
 function DocumentUploadPanelHarness() {
   const [resetKey, setResetKey] = useState(0);
@@ -38,7 +23,6 @@ function DocumentUploadPanelHarness() {
         onDismissPdfUpload={vi.fn()}
         onQueuePdfFiles={vi.fn()}
         onRetryPdfUpload={vi.fn()}
-        onStartPdfUploads={vi.fn()}
         onSubmitText={vi.fn()}
         onSubmitUrl={vi.fn()}
         pdfUploads={[]}
@@ -50,21 +34,38 @@ function DocumentUploadPanelHarness() {
   );
 }
 
+function selectFiles(files: File[]) {
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement | null;
+
+  expect(input).not.toBeNull();
+
+  const dataTransfer = new DataTransfer();
+  files.forEach(file => dataTransfer.items.add(file));
+
+  Object.defineProperty(input!, 'files', {
+    configurable: true,
+    value: dataTransfer.files,
+  });
+
+  input!.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 describe('DocumentUploadPanel', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('shows a client error when submitting PDF mode without queued files', async () => {
+  it('queues PDFs immediately when selected and hides the PDF submit button', async () => {
+    const onQueuePdfFiles = vi.fn();
+
     await render(
       <TestProviders>
         <DocumentUploadPanel
           errorMessage={null}
           isSubmitting={false}
           onDismissPdfUpload={vi.fn()}
-          onQueuePdfFiles={vi.fn()}
+          onQueuePdfFiles={onQueuePdfFiles}
           onRetryPdfUpload={vi.fn()}
-          onStartPdfUploads={vi.fn()}
           onSubmitText={vi.fn()}
           onSubmitUrl={vi.fn()}
           pdfUploads={[]}
@@ -73,37 +74,14 @@ describe('DocumentUploadPanel', () => {
       </TestProviders>,
     );
 
-    await page.getByRole('button', { name: contentMessages.upload_submit_pdf }).click();
+    await expect.element(page.getByRole('button', { name: contentMessages.upload_submit_pdf })).not.toBeInTheDocument();
 
-    await expect.element(page.getByText(contentMessages.pdf_missing_file)).toBeInTheDocument();
-  });
+    selectFiles([
+      new File(['pdf'], 'lesson-notes.pdf', { type: 'application/pdf' }),
+    ]);
 
-  it('starts queued PDF uploads from the submit action', async () => {
-    const onStartPdfUploads = vi.fn();
-
-    await render(
-      <TestProviders>
-        <DocumentUploadPanel
-          errorMessage={null}
-          isSubmitting={false}
-          onDismissPdfUpload={vi.fn()}
-          onQueuePdfFiles={vi.fn()}
-          onRetryPdfUpload={vi.fn()}
-          onStartPdfUploads={onStartPdfUploads}
-          onSubmitText={vi.fn()}
-          onSubmitUrl={vi.fn()}
-          pdfUploads={[createPdfUpload()]}
-          statusMessage={null}
-        />
-      </TestProviders>,
-    );
-
-    await expect.element(page.getByText('lesson-notes.pdf')).toBeInTheDocument();
-    await expect.element(page.getByText(contentMessages.upload_status_queued)).toBeInTheDocument();
-
-    await page.getByRole('button', { name: contentMessages.upload_submit_pdf }).click();
-
-    expect(onStartPdfUploads).toHaveBeenCalledTimes(1);
+    expect(onQueuePdfFiles).toHaveBeenCalledTimes(1);
+    expect(Array.from(onQueuePdfFiles.mock.calls[0]![0] as FileList).map(file => file.name)).toEqual(['lesson-notes.pdf']);
   });
 
   it('switches to URL mode and renders the URL field', async () => {
@@ -115,7 +93,6 @@ describe('DocumentUploadPanel', () => {
           onDismissPdfUpload={vi.fn()}
           onQueuePdfFiles={vi.fn()}
           onRetryPdfUpload={vi.fn()}
-          onStartPdfUploads={vi.fn()}
           onSubmitText={vi.fn()}
           onSubmitUrl={vi.fn()}
           pdfUploads={[]}
@@ -127,7 +104,42 @@ describe('DocumentUploadPanel', () => {
     await page.getByText(contentMessages.upload_mode_url, { exact: true }).click();
 
     await expect.element(page.getByRole('textbox', { name: contentMessages.url_label })).toBeInTheDocument();
+    await expect.element(page.getByRole('button', { name: contentMessages.upload_submit })).toBeInTheDocument();
     await expect.element(page.getByRole('textbox', { name: contentMessages.title_label })).not.toBeInTheDocument();
+  });
+
+  it('shows a validation error for rejected or oversized PDF selections', async () => {
+    const onQueuePdfFiles = vi.fn();
+
+    await render(
+      <TestProviders>
+        <DocumentUploadPanel
+          errorMessage={null}
+          isSubmitting={false}
+          onDismissPdfUpload={vi.fn()}
+          onQueuePdfFiles={onQueuePdfFiles}
+          onRetryPdfUpload={vi.fn()}
+          onSubmitText={vi.fn()}
+          onSubmitUrl={vi.fn()}
+          pdfUploads={[]}
+          statusMessage={null}
+        />
+      </TestProviders>,
+    );
+
+    selectFiles([
+      new File(['text'], 'notes.txt', { type: 'text/plain' }),
+    ]);
+
+    await expect.element(page.getByText(contentMessages.upload_validation_error)).toBeInTheDocument();
+    expect(onQueuePdfFiles).not.toHaveBeenCalled();
+
+    selectFiles([
+      new File([new Uint8Array((10 * 1024 * 1024) + 1)], 'oversized.pdf', { type: 'application/pdf' }),
+    ]);
+
+    await expect.element(page.getByText(contentMessages.upload_validation_error)).toBeInTheDocument();
+    expect(onQueuePdfFiles).not.toHaveBeenCalled();
   });
 
   it('hides the page heading in modal mode and resets fields after success', async () => {

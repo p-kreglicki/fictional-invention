@@ -54,7 +54,7 @@ describe('DashboardOverview', () => {
 
     await expect.element(page.getByRole('heading', { name: overviewMessages.title })).toBeInTheDocument();
     await expect.element(page.getByRole('heading', { name: contentMessages.upload_title })).toBeInTheDocument();
-    await expect.element(page.getByRole('button', { name: contentMessages.upload_submit_pdf })).toBeInTheDocument();
+    await expect.element(page.getByRole('button', { name: contentMessages.upload_submit_pdf })).not.toBeInTheDocument();
     await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
   });
 

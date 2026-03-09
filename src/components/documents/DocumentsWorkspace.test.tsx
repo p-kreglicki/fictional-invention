@@ -219,8 +219,6 @@ describe('DocumentsWorkspace', () => {
     await expect.element(page.getByText('first.pdf')).toBeInTheDocument();
     await expect.element(page.getByText('second.pdf')).toBeInTheDocument();
 
-    await page.getByRole('button', { name: contentMessages.upload_submit_pdf }).click();
-
     await vi.waitFor(() => {
       expect(MockXMLHttpRequest.instances).toHaveLength(1);
     });
@@ -276,6 +274,121 @@ describe('DocumentsWorkspace', () => {
     expect(MockXMLHttpRequest.instances[1]!.url.endsWith('/en/api/documents/upload')).toBe(true);
   });
 
+  it('appends PDFs added during an active upload and continues the queue automatically', async () => {
+    let documents = [createDocument()];
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/en/api/documents') && method === 'GET') {
+        return createJsonResponse({ documents });
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <DocumentsWorkspace />
+      </NextIntlClientProvider>,
+    );
+
+    queuePdfFiles([
+      new File(['first'], 'first.pdf', { type: 'application/pdf' }),
+    ]);
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(1);
+    });
+
+    queuePdfFiles([
+      new File(['second'], 'second.pdf', { type: 'application/pdf' }),
+      new File(['third'], 'third.pdf', { type: 'application/pdf' }),
+    ]);
+
+    await expect.element(page.getByText('second.pdf')).toBeInTheDocument();
+    await expect.element(page.getByText('third.pdf')).toBeInTheDocument();
+
+    documents = [
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440031',
+        title: 'first',
+        status: 'ready',
+        originalFilename: 'first.pdf',
+        createdAt: '2026-03-07T12:00:00.000Z',
+        processedAt: '2026-03-07T12:05:00.000Z',
+      }),
+      ...documents,
+    ];
+    MockXMLHttpRequest.instances[0]!.respond(202, { documentId: '550e8400-e29b-41d4-a716-446655440031', status: 'uploading' });
+    await flushAsyncWork();
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(2);
+    });
+
+    documents = [
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440031',
+        title: 'first',
+        status: 'ready',
+        originalFilename: 'first.pdf',
+        createdAt: '2026-03-07T12:00:00.000Z',
+        processedAt: '2026-03-07T12:05:00.000Z',
+      }),
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440032',
+        title: 'second',
+        status: 'ready',
+        originalFilename: 'second.pdf',
+        createdAt: '2026-03-07T12:01:00.000Z',
+        processedAt: '2026-03-07T12:06:00.000Z',
+      }),
+      ...documents.filter(document => document.id !== '550e8400-e29b-41d4-a716-446655440031'),
+    ];
+    MockXMLHttpRequest.instances[1]!.respond(202, { documentId: '550e8400-e29b-41d4-a716-446655440032', status: 'uploading' });
+    await flushAsyncWork();
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(3);
+    });
+
+    documents = [
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440031',
+        title: 'first',
+        status: 'ready',
+        originalFilename: 'first.pdf',
+        createdAt: '2026-03-07T12:00:00.000Z',
+        processedAt: '2026-03-07T12:05:00.000Z',
+      }),
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440032',
+        title: 'second',
+        status: 'ready',
+        originalFilename: 'second.pdf',
+        createdAt: '2026-03-07T12:01:00.000Z',
+        processedAt: '2026-03-07T12:06:00.000Z',
+      }),
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440033',
+        title: 'third',
+        status: 'ready',
+        originalFilename: 'third.pdf',
+        createdAt: '2026-03-07T12:02:00.000Z',
+        processedAt: '2026-03-07T12:07:00.000Z',
+      }),
+      createDocument(),
+    ];
+    MockXMLHttpRequest.instances[2]!.respond(202, { documentId: '550e8400-e29b-41d4-a716-446655440033', status: 'uploading' });
+    await flushAsyncWork();
+
+    await vi.waitFor(() => {
+      expect(page.getByText(contentMessages.upload_status_completed).elements()).toHaveLength(3);
+    });
+  });
+
   it('retries a failed processed PDF by deleting the failed document first', async () => {
     let documents: DocumentListItem[] = [];
     const deletedDocumentIds: string[] = [];
@@ -306,8 +419,6 @@ describe('DocumentsWorkspace', () => {
     queuePdfFiles([
       new File(['retry'], 'retry.pdf', { type: 'application/pdf' }),
     ]);
-
-    await page.getByRole('button', { name: contentMessages.upload_submit_pdf }).click();
 
     await vi.waitFor(() => {
       expect(MockXMLHttpRequest.instances).toHaveLength(1);

@@ -23,7 +23,6 @@ type DocumentUploadPanelProps = {
   onDismissPdfUpload: (uploadId: string) => void;
   onQueuePdfFiles: (files: FileList) => void;
   onRetryPdfUpload: (uploadId: string) => Promise<void> | void;
-  onStartPdfUploads: () => void;
   onSubmitUrl: (input: { url: string; title: string }) => Promise<void>;
   onSubmitText: (input: { title: string; content: string }) => Promise<void>;
 };
@@ -149,7 +148,6 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
   const [state, dispatch] = useReducer(uploadFormReducer, undefined, createInitialUploadFormState);
   const isModal = props.variant === 'modal';
   const isDashboard = props.variant === 'dashboard';
-  const hasQueuedPdfUploads = props.pdfUploads.some(upload => upload.phase === 'queued');
 
   useEffect(() => {
     dispatch({ type: 'reset_form' });
@@ -158,16 +156,6 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     dispatch({ type: 'set_client_error', value: null });
-
-    if (state.mode === 'pdf') {
-      if (!hasQueuedPdfUploads) {
-        dispatch({ type: 'set_client_error', value: t('pdf_missing_file') });
-        return;
-      }
-
-      props.onStartPdfUploads();
-      return;
-    }
 
     if (state.mode === 'url') {
       if (!state.url.trim()) {
@@ -350,13 +338,13 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
           </p>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <Button disabled={props.isSubmitting} type="submit" variant="primary">
-            {props.isSubmitting
-              ? (state.mode === 'pdf' ? t('upload_loading_pdf') : t('upload_loading'))
-              : (state.mode === 'pdf' ? t('upload_submit_pdf') : t('upload_submit'))}
-          </Button>
-        </div>
+        {state.mode !== 'pdf' && (
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <Button disabled={props.isSubmitting} type="submit" variant="primary">
+              {props.isSubmitting ? t('upload_loading') : t('upload_submit')}
+            </Button>
+          </div>
+        )}
       </form>
     </section>
   );
