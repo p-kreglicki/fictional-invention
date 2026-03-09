@@ -11,6 +11,10 @@
     "description": "Your personal Italian language learning tool",
     "footer_text": "© {year} {name}. Made with <author></author>."
   },
+  "AuthLayout": {
+    "title": "Learn from your own material",
+    "description": "Upload notes, articles, and study texts. Turn them into targeted exercises without leaving your workspace."
+  },
   "Index": {
     "meta_title": "Next.js Boilerplate Presentation",
     "meta_description": "Next js Boilerplate is the perfect starter code for your project. Build your React application with the Next.js framework.",
@@ -77,6 +81,13 @@
     "score_card_label": "Recent average score",
     "score_card_description": "Average score across your 20 most recent responses.",
     "score_empty": "No scores yet",
+    "jobs_status_active": "Needs attention",
+    "jobs_status_clear": "Clear",
+    "workflow_title": "Learning workflow",
+    "workflow_description": "Keep the core study flow visible in one place as documents move from upload to practice.",
+    "workflow_cta": "Open content library",
+    "status_ready": "Ready",
+    "status_waiting": "Waiting",
     "content_modal_title": "Add study resources",
     "content_modal_description": "Upload a PDF, add a URL, or paste text without leaving the dashboard.",
     "content_modal_recent_title": "Recent uploads",

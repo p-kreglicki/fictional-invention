@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { badgeStyles, panelStyles } from '@/components/ui/styles';
 
 type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -44,28 +45,30 @@ export function GenerationJobStatus(props: GenerationJobStatusProps) {
   }
 
   return (
-    <section className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-4">
-      <h2 className="text-base font-semibold text-gray-900">{t('jobs_title')}</h2>
+    <section className={panelStyles({ tone: 'muted', className: 'space-y-3' })}>
+      <h2 className="text-base font-semibold text-ink-900">{t('jobs_title')}</h2>
 
       <ul className="space-y-2">
         {props.jobs.map(job => (
-          <li key={job.id} className="rounded-sm border border-gray-200 bg-white p-3 text-sm">
+          <li key={job.id} className="rounded-[1.25rem] border border-white/85 bg-white p-4 text-sm shadow-xs">
             <div className="flex items-center justify-between gap-4">
-              <span className="font-medium text-gray-900">{statusLabel(t, job.status)}</span>
-              <span className="text-gray-600">
+              <span className={badgeStyles({ tone: job.status === 'failed' ? 'danger' : job.status === 'completed' ? 'success' : 'warning' })}>
+                {statusLabel(t, job.status)}
+              </span>
+              <span className="text-ink-600">
                 {job.generatedCount}
                 /
                 {job.requestedCount}
               </span>
             </div>
-            <p className="mt-1 text-gray-600">
+            <p className="mt-2 text-ink-600">
               {t('job_failed_count')}
               :
               {' '}
               {job.failedCount}
             </p>
             {job.errorMessage && (
-              <p className="mt-1 text-red-600">{job.errorMessage}</p>
+              <p className="mt-2 rounded-2xl border border-error-100 bg-error-50 px-3 py-2 text-error-700">{job.errorMessage}</p>
             )}
           </li>
         ))}

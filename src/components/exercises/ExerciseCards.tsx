@@ -7,6 +7,10 @@ import type {
 } from '@/validations/ResponseValidation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { RadioButton, RadioGroup } from '@/components/ui/Radio';
+import { badgeStyles, fieldLabelStyles, panelStyles, textareaStyles } from '@/components/ui/styles';
 import { SubmissionDraftsSchema, SubmitResponseSuccessSchema } from '@/validations/ResponseValidation';
 
 type ExerciseCardsProps = {
@@ -165,31 +169,31 @@ function renderRubric(props: {
   };
 }) {
   return (
-    <dl className="grid grid-cols-2 gap-2 text-xs text-gray-600 sm:grid-cols-4">
-      <div className="rounded-md bg-gray-50 p-2">
+    <dl className="grid grid-cols-2 gap-2 text-xs text-ink-600 sm:grid-cols-4">
+      <div className="rounded-2xl bg-white/85 p-3">
         <dt>{props.labels.accuracy}</dt>
-        <dd className="mt-1 font-semibold text-gray-900">
+        <dd className="mt-1 font-semibold text-ink-900">
           {props.response.rubric.accuracy}
           /40
         </dd>
       </div>
-      <div className="rounded-md bg-gray-50 p-2">
+      <div className="rounded-2xl bg-white/85 p-3">
         <dt>{props.labels.grammar}</dt>
-        <dd className="mt-1 font-semibold text-gray-900">
+        <dd className="mt-1 font-semibold text-ink-900">
           {props.response.rubric.grammar}
           /30
         </dd>
       </div>
-      <div className="rounded-md bg-gray-50 p-2">
+      <div className="rounded-2xl bg-white/85 p-3">
         <dt>{props.labels.fluency}</dt>
-        <dd className="mt-1 font-semibold text-gray-900">
+        <dd className="mt-1 font-semibold text-ink-900">
           {props.response.rubric.fluency}
           /20
         </dd>
       </div>
-      <div className="rounded-md bg-gray-50 p-2">
+      <div className="rounded-2xl bg-white/85 p-3">
         <dt>{props.labels.bonus}</dt>
-        <dd className="mt-1 font-semibold text-gray-900">
+        <dd className="mt-1 font-semibold text-ink-900">
           {props.response.rubric.bonus}
           /10
         </dd>
@@ -371,16 +375,16 @@ export function ExerciseCards(props: ExerciseCardsProps) {
 
   if (props.exercises.length === 0) {
     return (
-      <section className="rounded-md border border-gray-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-gray-900">{t('results_title')}</h2>
-        <p className="mt-2 text-sm text-gray-600">{t('results_empty')}</p>
+      <section className={panelStyles()}>
+        <h2 className="text-base font-semibold text-ink-900">{t('results_title')}</h2>
+        <p className="mt-2 text-sm text-ink-600">{t('results_empty')}</p>
       </section>
     );
   }
 
   return (
     <section className="space-y-4">
-      <h2 className="text-base font-semibold text-gray-900">{t('results_title')}</h2>
+      <h2 className="text-base font-semibold text-ink-900">{t('results_title')}</h2>
 
       <div className="grid gap-4 md:grid-cols-2">
         {props.exercises.map((exercise) => {
@@ -397,11 +401,11 @@ export function ExerciseCards(props: ExerciseCardsProps) {
           );
 
           return (
-            <article key={exercise.id} className="rounded-md border border-gray-200 bg-white p-4">
+            <article key={exercise.id} className="rounded-[1.75rem] border border-white/85 bg-white p-5 shadow-sm">
               {metadataLabels.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-gray-500 uppercase">
+                <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-ink-500 uppercase">
                   {metadataLabels.map((label, index) => (
-                    <span key={`${exercise.id}-${label}`}>
+                    <span key={`${exercise.id}-${label}`} className={badgeStyles({ tone: 'neutral' })}>
                       {index > 0 && <span aria-hidden="true" className="mr-2">•</span>}
                       {label}
                     </span>
@@ -409,10 +413,10 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                 </div>
               )}
 
-              <h3 className="mt-2 text-sm font-semibold text-gray-900">{exercise.question}</h3>
+              <h3 className="mt-3 text-base font-semibold text-ink-900">{exercise.question}</h3>
 
               {exercise.grammarFocus && (
-                <p className="mt-2 text-xs text-gray-600">
+                <p className="mt-2 text-xs text-ink-600">
                   {t('grammar_focus_label')}
                   :
                   {' '}
@@ -422,66 +426,62 @@ export function ExerciseCards(props: ExerciseCardsProps) {
 
               {exercise.type === 'multiple_choice' && (
                 <fieldset className="mt-3 space-y-3">
-                  <legend className="text-sm text-gray-700">{t('choose_correct_answer_label')}</legend>
-                  {exercise.renderData.options.map((option, index, options) => {
-                    const duplicateCount = options
-                      .slice(0, index)
-                      .filter(existingOption => existingOption === option)
-                      .length;
+                  <legend className="text-sm text-ink-700">{t('choose_correct_answer_label')}</legend>
+                  <RadioGroup
+                    aria-label={t('choose_correct_answer_label')}
+                    className="mt-3 space-y-3"
+                    onChange={(value) => {
+                      clearSubmissionDraft(exercise.id);
+                      setAnswersByExerciseId(current => ({
+                        ...current,
+                        [exercise.id]: String(value),
+                      }));
+                    }}
+                    value={answersByExerciseId[exercise.id] ?? ''}
+                  >
+                    {exercise.renderData.options.map((option, index, options) => {
+                      const duplicateCount = options
+                        .slice(0, index)
+                        .filter(existingOption => existingOption === option)
+                        .length;
 
-                    return (
-                      <label
-                        key={`${exercise.id}-${option}-${duplicateCount}`}
-                        className="flex cursor-pointer items-center gap-3 py-1 text-sm text-gray-700"
-                      >
-                        <input
-                          className="h-4 w-4 shrink-0 border-gray-300 text-gray-900"
-                          type="radio"
-                          name={`exercise-${exercise.id}`}
+                      return (
+                        <RadioButton
+                          key={`${exercise.id}-${option}-${duplicateCount}`}
+                          className="rounded-lg border border-ink-100 bg-ink-50/75 px-4 py-3"
+                          isDisabled={submissionState?.isSubmitting}
+                          label={option}
                           value={String(index)}
-                          checked={answersByExerciseId[exercise.id] === String(index)}
-                          disabled={submissionState?.isSubmitting}
-                          onChange={(event) => {
-                            clearSubmissionDraft(exercise.id);
-                            setAnswersByExerciseId(current => ({
-                              ...current,
-                              [exercise.id]: event.target.value,
-                            }));
-                          }}
                         />
-                        <span>{option}</span>
-                      </label>
-                    );
-                  })}
+                      );
+                    })}
+                  </RadioGroup>
                 </fieldset>
               )}
 
               {exercise.type === 'fill_gap' && (
                 <div className="mt-3 space-y-2">
                   {exercise.renderData.hint && (
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-ink-600">
                       {t('hint_label')}
                       :
                       {' '}
                       {exercise.renderData.hint}
                     </p>
                   )}
-                  <label className="block text-sm text-gray-700" htmlFor={`answer-${exercise.id}`}>
-                    {t('answer_input_label')}
-                  </label>
-                  <input
+                  <Input
                     id={`answer-${exercise.id}`}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
-                    value={answersByExerciseId[exercise.id] ?? ''}
-                    disabled={submissionState?.isSubmitting}
-                    onChange={(event) => {
+                    isDisabled={submissionState?.isSubmitting}
+                    label={t('answer_input_label')}
+                    onChange={(value) => {
                       clearSubmissionDraft(exercise.id);
                       setAnswersByExerciseId(current => ({
                         ...current,
-                        [exercise.id]: event.target.value,
+                        [exercise.id]: value,
                       }));
                     }}
                     placeholder={t('fill_gap_placeholder')}
+                    value={answersByExerciseId[exercise.id] ?? ''}
                   />
                 </div>
               )}
@@ -489,8 +489,8 @@ export function ExerciseCards(props: ExerciseCardsProps) {
               {exercise.type === 'single_answer' && (
                 <div className="mt-3 space-y-3">
                   <div>
-                    <p className="text-sm text-gray-700">{t('grading_criteria_label')}</p>
-                    <ul className="mt-2 list-inside list-disc text-sm text-gray-600">
+                    <p className="text-sm text-ink-700">{t('grading_criteria_label')}</p>
+                    <ul className="mt-2 list-inside list-disc text-sm text-ink-600">
                       {exercise.renderData.gradingCriteria.map(item => (
                         <li key={`${exercise.id}-${item}`}>{item}</li>
                       ))}
@@ -498,12 +498,12 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-700" htmlFor={`answer-${exercise.id}`}>
-                      {t('answer_input_label')}
+                    <label className="block text-sm text-ink-700" htmlFor={`answer-${exercise.id}`}>
+                      <span className={fieldLabelStyles()}>{t('answer_input_label')}</span>
                     </label>
                     <textarea
                       id={`answer-${exercise.id}`}
-                      className="mt-2 min-h-28 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                      className={`mt-2 min-h-28 ${textareaStyles()}`}
                       value={answersByExerciseId[exercise.id] ?? ''}
                       disabled={submissionState?.isSubmitting}
                       onChange={(event) => {
@@ -520,29 +520,29 @@ export function ExerciseCards(props: ExerciseCardsProps) {
               )}
 
               <div className="mt-4 flex items-center gap-3">
-                <button
-                  type="button"
-                  className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-400"
+                <Button
                   disabled={submissionState?.isSubmitting}
                   onClick={() => {
                     void handleSubmit(exercise);
                   }}
+                  type="button"
+                  variant="primary"
                 >
                   {submissionState?.isSubmitting
                     ? t('submit_answer_loading')
                     : t('submit_answer_button')}
-                </button>
+                </Button>
 
                 {submissionState?.errorMessage && (
-                  <p className="text-sm text-red-600">{submissionState.errorMessage}</p>
+                  <p className="rounded-2xl border border-error-100 bg-error-50 px-3 py-2 text-sm text-error-700">{submissionState.errorMessage}</p>
                 )}
               </div>
 
               {exercise.latestResponse && (
-                <section className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-4">
+                <section className="mt-4 rounded-[1.5rem] border border-brand-100 bg-brand-25 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-sm font-semibold text-gray-900">{t('latest_response_label')}</h4>
-                    <p className="text-sm font-semibold text-gray-900">
+                    <h4 className="text-sm font-semibold text-ink-900">{t('latest_response_label')}</h4>
+                    <p className="text-sm font-semibold text-ink-900">
                       {t('score_label')}
                       :
                       {' '}
@@ -558,16 +558,16 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                     })}
                   </div>
 
-                  <p className="mt-3 text-sm text-gray-700">
-                    <span className="font-medium text-gray-900">{t('feedback_label')}</span>
+                  <p className="mt-3 text-sm text-ink-700">
+                    <span className="font-medium text-ink-900">{t('feedback_label')}</span>
                     :
                     {' '}
                     {exercise.latestResponse.overallFeedback}
                   </p>
 
                   {exercise.latestResponse.suggestedReview.length > 0 && (
-                    <p className="mt-2 text-sm text-gray-700">
-                      <span className="font-medium text-gray-900">{t('suggested_review_label')}</span>
+                    <p className="mt-2 text-sm text-ink-700">
+                      <span className="font-medium text-ink-900">{t('suggested_review_label')}</span>
                       :
                       {' '}
                       {exercise.latestResponse.suggestedReview.join(', ')}

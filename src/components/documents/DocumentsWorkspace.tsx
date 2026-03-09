@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { panelStyles } from '@/components/ui/styles';
 import { DeleteDocumentDialog } from './DeleteDocumentDialog';
 import { DocumentsLibrary } from './DocumentsLibrary';
 import { DocumentUploadPanel } from './DocumentUploadPanel';
@@ -24,7 +25,7 @@ export function DocumentsWorkspace() {
 
       {documentsWorkspace.isBootstrapping
         ? (
-            <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+            <section className={panelStyles({ className: 'text-sm text-ink-600' })}>
               {t('loading')}
             </section>
           )

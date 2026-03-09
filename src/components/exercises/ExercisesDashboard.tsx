@@ -4,10 +4,12 @@ import type { ExerciseCardItem } from './ExerciseCards';
 import type { ExerciseGenerationJobStatus } from './GenerationJobStatus';
 import type { DocumentListItem } from '@/validations/DocumentValidation';
 import type { ExerciseLatestResponse } from '@/validations/ResponseValidation';
+import { ArrowRight, FileSearch03, TrendUp02 } from '@untitledui/icons';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { createPollingGate } from '@/components/exercises/PollingGate';
+import { badgeStyles, buttonStyles, panelStyles } from '@/components/ui/styles';
 import { Link } from '@/libs/I18nNavigation';
 import { DocumentListItemSchema } from '@/validations/DocumentValidation';
 import { ExerciseCardSchema, SubmitResponseSuccessSchema } from '@/validations/ResponseValidation';
@@ -311,7 +313,7 @@ export function ExercisesDashboard() {
   }
 
   if (isBootstrapping) {
-    return <p className="text-sm text-gray-600">{t('loading')}</p>;
+    return <section className={panelStyles({ className: 'text-sm text-ink-600' })}>{t('loading')}</section>;
   }
 
   const showNoDocumentsState = documents.length === 0;
@@ -320,21 +322,36 @@ export function ExercisesDashboard() {
 
   return (
     <div className="space-y-6 py-5">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
-        <p className="text-sm text-gray-600">{t('description')}</p>
+      <header className={panelStyles({ tone: 'strong' })}>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <span className={badgeStyles({ tone: 'brand', uppercase: true })}>{t('jobs_title')}</span>
+            <h1 className="mt-4 text-3xl font-semibold text-ink-950 sm:text-4xl">{t('title')}</h1>
+            <p className="mt-3 text-sm leading-7 text-ink-600">{t('description')}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <article className="rounded-[1.5rem] border border-white/90 bg-white/80 p-4 shadow-xs">
+              <TrendUp02 className="h-5 w-5 text-brand-600" />
+              <p className="mt-4 text-xs font-semibold tracking-[0.18em] text-ink-500 uppercase">{t('results_title')}</p>
+            </article>
+            <article className="rounded-[1.5rem] border border-white/90 bg-white/80 p-4 shadow-xs">
+              <FileSearch03 className="h-5 w-5 text-brand-600" />
+              <p className="mt-4 text-xs font-semibold tracking-[0.18em] text-ink-500 uppercase">{t('documents_label')}</p>
+            </article>
+          </div>
+        </div>
       </header>
 
       {(showNoDocumentsState || showProcessingState || showFailedState) && (
-        <section className="rounded-md border border-gray-200 bg-gray-50 p-4">
-          <h2 className="text-base font-semibold text-gray-900">
+        <section className={panelStyles({ tone: 'muted' })}>
+          <h2 className="text-base font-semibold text-ink-950">
             {showNoDocumentsState
               ? t('state_no_documents_title')
               : showProcessingState
                 ? t('state_processing_title')
                 : t('state_failed_title')}
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm leading-6 text-ink-600">
             {showNoDocumentsState
               ? t('state_no_documents_description')
               : showProcessingState
@@ -343,15 +360,16 @@ export function ExercisesDashboard() {
           </p>
           <Link
             href="/dashboard/content/"
-            className="mt-4 inline-flex rounded-sm bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            className={`mt-4 ${buttonStyles({ tone: 'primary' })}`}
           >
             {t('state_content_cta')}
+            <ArrowRight className="h-4 w-4" />
           </Link>
         </section>
       )}
 
       {readyDocuments.length > 0 && (processingDocumentsCount > 0 || failedDocumentsCount > 0) && (
-        <section className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+        <section className={panelStyles({ tone: 'muted', className: 'text-sm text-ink-600' })}>
           {processingDocumentsCount > 0 && (
             <p>{t('state_partial_processing', { count: processingDocumentsCount })}</p>
           )}
