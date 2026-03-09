@@ -2,9 +2,10 @@
 
 import type { DashboardSummary } from '@/validations/DocumentValidation';
 import { useLocale, useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from '@/libs/I18nNavigation';
 import { DashboardSummarySchema } from '@/validations/DocumentValidation';
+import { DashboardAddContentModal } from './DashboardAddContentModal';
 
 export function DashboardOverview() {
   const locale = useLocale();
@@ -12,29 +13,47 @@ export function DashboardOverview() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isAddContentModalOpen, setIsAddContentModalOpen] = useState(false);
+  const addContentButtonRef = useRef<HTMLButtonElement | null>(null);
+  const wasAddContentModalOpenRef = useRef(false);
+
+  async function fetchSummary() {
+    const response = await fetch(`/${locale}/api/dashboard/summary`);
+    const payload = await response.json() as unknown;
+
+    if (!response.ok) {
+      throw new Error('summary_failed');
+    }
+
+    const parsed = DashboardSummarySchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new Error('summary_invalid');
+    }
+
+    return parsed.data;
+  }
+
+  async function refreshSummary() {
+    const nextSummary = await fetchSummary();
+    setSummary(nextSummary);
+    setErrorMessage(null);
+  }
 
   useEffect(() => {
     let active = true;
 
     async function loadSummary() {
+      setIsLoading(true);
+
       try {
-        const response = await fetch(`/${locale}/api/dashboard/summary`);
-        const payload = await response.json() as unknown;
-
-        if (!response.ok) {
-          throw new Error('summary_failed');
-        }
-
-        const parsed = DashboardSummarySchema.safeParse(payload);
-        if (!parsed.success) {
-          throw new Error('summary_invalid');
-        }
+        const nextSummary = await fetchSummary();
 
         if (!active) {
           return;
         }
 
-        setSummary(parsed.data);
+        setSummary(nextSummary);
+        setErrorMessage(null);
       } catch {
         if (!active) {
           return;
@@ -55,6 +74,14 @@ export function DashboardOverview() {
     };
   }, [locale, t]);
 
+  useEffect(() => {
+    if (!isAddContentModalOpen && wasAddContentModalOpenRef.current) {
+      addContentButtonRef.current?.focus();
+    }
+
+    wasAddContentModalOpenRef.current = isAddContentModalOpen;
+  }, [isAddContentModalOpen]);
+
   return (
     <div className="space-y-6 py-6">
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-5">
@@ -65,12 +92,14 @@ export function DashboardOverview() {
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{t('description')}</p>
 
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link
-            href="/dashboard/content/"
+          <button
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+            onClick={() => setIsAddContentModalOpen(true)}
+            ref={addContentButtonRef}
+            type="button"
           >
             {t('content_cta')}
-          </Link>
+          </button>
           <Link
             href="/dashboard/exercises/"
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
@@ -152,6 +181,19 @@ export function DashboardOverview() {
             </article>
           </section>
         </>
+      )}
+
+      {isAddContentModalOpen && (
+        <DashboardAddContentModal
+          onClose={() => setIsAddContentModalOpen(false)}
+          onSummaryRefresh={async () => {
+            try {
+              await refreshSummary();
+            } catch {
+              setErrorMessage(t('summary_error'));
+            }
+          }}
+        />
       )}
     </div>
   );
