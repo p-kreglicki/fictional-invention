@@ -18,6 +18,7 @@
   "Index": {
     "meta_title": "Présentation de Next.js Boilerplate",
     "meta_description": "Next js Boilerplate est le code de démarrage parfait pour votre projet. Construisez votre application React avec le framework Next.js.",
+    "hero_title": "Code de démarrage pour Next.js avec Tailwind CSS",
     "sponsors_title": "Partenaires"
   },
   "Counter": {
@@ -64,42 +65,17 @@
   },
   "DashboardOverviewPage": {
     "meta_title": "Vue d'ensemble",
-    "eyebrow": "Espace d'étude",
     "title": "Transformez vos contenus en entraînement",
     "description": "Importez vos supports, générez des exercices à partir des documents prêts et suivez l'évolution de vos réponses récentes.",
-    "loading": "Chargement de la vue d'ensemble...",
-    "summary_error": "Impossible de charger la vue d'ensemble.",
     "content_cta": "Ajouter du contenu",
     "exercises_cta": "Commencer",
     "progress_cta": "Voir les progrès",
-    "documents_card_label": "Documents",
-    "documents_ready": "Prêts",
-    "documents_processing": "En cours",
-    "documents_failed": "Échoués",
-    "jobs_card_label": "Jobs actifs",
-    "jobs_card_description": "Les jobs de génération restent visibles ici pendant la préparation de nouveaux exercices.",
-    "score_card_label": "Score moyen récent",
-    "score_card_description": "Score moyen sur vos 20 réponses les plus récentes.",
-    "score_empty": "Pas encore de score",
-    "jobs_status_active": "À traiter",
-    "jobs_status_clear": "Libre",
-    "workflow_title": "Parcours d'étude",
-    "workflow_description": "Gardez le flux principal visible au même endroit, de l'import jusqu'à la pratique.",
-    "workflow_cta": "Ouvrir le contenu",
-    "status_ready": "Prêt",
-    "status_waiting": "En attente",
     "content_modal_title": "Ajouter des ressources d'étude",
     "content_modal_description": "Importez un PDF, ajoutez une URL ou collez du texte sans quitter le tableau de bord.",
     "content_modal_recent_title": "Imports récents",
     "content_modal_recent_description": "Les ressources importées pendant cette session apparaissent ici dès que l'API les accepte.",
     "content_modal_recent_empty": "Les imports de cette session apparaîtront ici.",
-    "content_modal_close": "Fermer",
-    "step_content_title": "1. Préparer le contenu",
-    "step_content_description": "Importez un PDF, ajoutez une URL ou collez du texte pour créer une base de travail exploitable.",
-    "step_exercises_title": "2. Générer des exercices",
-    "step_exercises_description": "Choisissez des documents prêts, un type d'exercice, puis répondez depuis une page de pratique dédiée.",
-    "step_progress_title": "3. Suivre les progrès",
-    "step_progress_description": "Consultez les tentatives récentes, filtrez par document et observez l'évolution des scores."
+    "content_modal_close": "Fermer"
   },
   "UserProfile": {
     "meta_title": "Profil de l'utilisateur"

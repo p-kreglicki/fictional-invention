@@ -42,7 +42,7 @@ export default async function Index(props: IIndexProps) {
         {` for updates and more information about the boilerplate.`}
       </p>
       <h2 className="mt-5 text-2xl font-bold">
-        Boilerplate Code for Your Next.js Project with Tailwind CSS
+        {t('hero_title')}
       </h2>
       <p className="text-base">
         Next.js Boilerplate is a developer-friendly starter code for Next.js projects, built with Tailwind CSS and TypeScript.

@@ -49,7 +49,10 @@ export function LocaleSwitcher(props?: {
       onSelectionChange={handleChange}
       className="w-full"
     >
-      <Button className={cn('flex w-full items-center px-3 py-2 text-left transition focus:outline-none', props?.triggerClassName)}>
+      <Button
+        aria-label={t('change_language')}
+        className={cn('flex w-full items-center px-3 py-2 text-left transition focus:outline-none', props?.triggerClassName)}
+      >
         <span className={cn('mr-2 flex size-5 shrink-0 items-center justify-start', props?.iconSlotClassName)}>
           <Globe01 className={cn('h-5 w-5 shrink-0', props?.iconClassName)} />
         </span>
