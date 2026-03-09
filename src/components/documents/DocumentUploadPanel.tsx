@@ -1,24 +1,29 @@
 'use client';
 
+import type { PdfUploadSessionItem } from './useDocumentsWorkspace';
 import { UploadCloud02 } from '@untitledui/icons';
 import { useTranslations } from 'next-intl';
 import { useEffect, useReducer } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { fieldLabelStyles, panelStyles, textareaStyles } from '@/components/ui/styles';
-import { FileUploadDropZone } from '@/components/untitled/application/file-upload/file-upload-base';
+import { FileUpload } from '@/components/untitled/application/file-upload/file-upload-base';
 import { ButtonGroup, ButtonGroupItem } from '@/components/untitled/base/button-group/button-group';
 import { cn } from '@/utils/cn';
 
 type UploadMode = 'pdf' | 'url' | 'text';
 
 type DocumentUploadPanelProps = {
+  pdfUploads: PdfUploadSessionItem[];
   isSubmitting: boolean;
   statusMessage: string | null;
   errorMessage: string | null;
   resetKey?: number;
   variant?: 'page' | 'modal' | 'dashboard';
-  onSubmitPdf: (input: { file: File; title: string }) => Promise<void>;
+  onDismissPdfUpload: (uploadId: string) => void;
+  onQueuePdfFiles: (files: FileList) => void;
+  onRetryPdfUpload: (uploadId: string) => Promise<void> | void;
+  onStartPdfUploads: () => void;
   onSubmitUrl: (input: { url: string; title: string }) => Promise<void>;
   onSubmitText: (input: { title: string; content: string }) => Promise<void>;
 };
@@ -28,7 +33,6 @@ type UploadFormState = {
   title: string;
   url: string;
   textContent: string;
-  selectedFile: File | null;
   clientError: string | null;
   fileInputKey: number;
 };
@@ -38,7 +42,6 @@ type UploadFormAction
     | { type: 'set_title'; value: string }
     | { type: 'set_url'; value: string }
     | { type: 'set_text_content'; value: string }
-    | { type: 'set_selected_file'; file: File | null }
     | { type: 'set_client_error'; value: string | null }
     | { type: 'reset_form' };
 
@@ -48,7 +51,6 @@ function createInitialUploadFormState(): UploadFormState {
     title: '',
     url: '',
     textContent: '',
-    selectedFile: null,
     clientError: null,
     fileInputKey: 0,
   };
@@ -77,11 +79,6 @@ function uploadFormReducer(state: UploadFormState, action: UploadFormAction): Up
         ...state,
         textContent: action.value,
       };
-    case 'set_selected_file':
-      return {
-        ...state,
-        selectedFile: action.file,
-      };
     case 'set_client_error':
       return {
         ...state,
@@ -93,11 +90,58 @@ function uploadFormReducer(state: UploadFormState, action: UploadFormAction): Up
         title: '',
         url: '',
         textContent: '',
-        selectedFile: null,
         clientError: null,
         fileInputKey: state.fileInputKey + 1,
       };
   }
+}
+
+function getPdfUploadStatus(input: {
+  item: PdfUploadSessionItem;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  if (input.item.phase === 'completed') {
+    return {
+      statusIcon: 'complete' as const,
+      statusLabel: input.t('upload_status_completed'),
+      hideProgress: false,
+      progress: 100,
+    };
+  }
+
+  if (input.item.phase === 'failed') {
+    return {
+      statusIcon: 'failed' as const,
+      statusLabel: input.t('upload_status_failed'),
+      hideProgress: true,
+      progress: input.item.progress,
+    };
+  }
+
+  if (input.item.phase === 'processing') {
+    return {
+      statusIcon: 'processing' as const,
+      statusLabel: input.t('upload_status_processing'),
+      hideProgress: false,
+      progress: 100,
+    };
+  }
+
+  if (input.item.phase === 'queued') {
+    return {
+      statusIcon: 'uploading' as const,
+      statusLabel: input.t('upload_status_queued'),
+      hideProgress: false,
+      progress: 0,
+    };
+  }
+
+  return {
+    statusIcon: 'uploading' as const,
+    statusLabel: input.t('upload_status_uploading'),
+    hideProgress: false,
+    progress: input.item.progress,
+  };
 }
 
 export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
@@ -105,6 +149,7 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
   const [state, dispatch] = useReducer(uploadFormReducer, undefined, createInitialUploadFormState);
   const isModal = props.variant === 'modal';
   const isDashboard = props.variant === 'dashboard';
+  const hasQueuedPdfUploads = props.pdfUploads.some(upload => upload.phase === 'queued');
 
   useEffect(() => {
     dispatch({ type: 'reset_form' });
@@ -115,15 +160,12 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
     dispatch({ type: 'set_client_error', value: null });
 
     if (state.mode === 'pdf') {
-      if (!state.selectedFile) {
+      if (!hasQueuedPdfUploads) {
         dispatch({ type: 'set_client_error', value: t('pdf_missing_file') });
         return;
       }
 
-      await props.onSubmitPdf({
-        file: state.selectedFile,
-        title: state.title.trim(),
-      });
+      props.onStartPdfUploads();
       return;
     }
 
@@ -204,60 +246,63 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
           </div>
         )}
 
-        {isModal && (
-          renderUploadModeGroup()
-        )}
+        {isModal && renderUploadModeGroup()}
       </div>
 
       <form className={cn(isModal ? 'mt-4 space-y-4' : 'mt-6 space-y-5', isDashboard && 'border-t border-ink-100 px-6 py-6 sm:px-7')} onSubmit={handleSubmit}>
-        {state.mode === 'text' && (
-          <Input
-            label={t('title_label')}
-            maxLength={200}
-            onChange={value => dispatch({ type: 'set_title', value })}
-            placeholder={t('text_title_placeholder')}
-            type="text"
-            value={state.title}
-          />
-        )}
-
         {state.mode === 'pdf' && (
-          <div className="space-y-4">
-            <FileUploadDropZone
+          <FileUpload.Root className="space-y-4">
+            <FileUpload.DropZone
               key={state.fileInputKey}
               accept="application/pdf,.pdf"
-              allowsMultiple={false}
+              allowsMultiple
               className={cn(
                 isDashboard && 'rounded-lg border border-dashed border-ink-300 bg-ink-25/80 px-8 py-10',
               )}
               hint={t('pdf_help')}
+              isDisabled={props.isSubmitting}
               maxSize={10 * 1024 * 1024}
               onDropFiles={(files) => {
                 dispatch({ type: 'set_client_error', value: null });
-                dispatch({ type: 'set_selected_file', file: files[0] ?? null });
+                props.onQueuePdfFiles(files);
               }}
               onDropUnacceptedFiles={() => {
                 dispatch({ type: 'set_client_error', value: t('upload_validation_error') });
-                dispatch({ type: 'set_selected_file', file: null });
               }}
               onSizeLimitExceed={() => {
                 dispatch({ type: 'set_client_error', value: t('upload_validation_error') });
-                dispatch({ type: 'set_selected_file', file: null });
               }}
             />
-            {state.selectedFile && (
-              <p className={cn(
-                'mt-4 rounded-lg bg-brand-25 px-4 py-3 text-sm text-ink-600',
-                isDashboard && 'mx-auto max-w-sm text-center',
-              )}
-              >
-                {t('selected_file')}
-                :
-                {' '}
-                {state.selectedFile.name}
-              </p>
+
+            {props.pdfUploads.length > 0 && (
+              <FileUpload.List>
+                {props.pdfUploads.map((upload) => {
+                  const status = getPdfUploadStatus({ item: upload, t });
+                  const canDismiss = upload.phase !== 'uploading' && upload.phase !== 'processing';
+
+                  return (
+                    <FileUpload.ListItemProgressBar
+                      key={upload.id}
+                      className={cn(isDashboard && 'rounded-lg')}
+                      complete={upload.phase === 'completed'}
+                      deleteLabel={t('upload_dismiss')}
+                      failed={upload.phase === 'failed'}
+                      hideProgress={status.hideProgress}
+                      name={upload.name}
+                      onDelete={canDismiss ? () => props.onDismissPdfUpload(upload.id) : undefined}
+                      onRetry={upload.phase === 'failed' ? () => props.onRetryPdfUpload(upload.id) : undefined}
+                      progress={status.progress}
+                      retryLabel={t('upload_retry')}
+                      size={upload.size}
+                      statusIcon={status.statusIcon}
+                      statusLabel={status.statusLabel}
+                      type="pdf"
+                    />
+                  );
+                })}
+              </FileUpload.List>
             )}
-          </div>
+          </FileUpload.Root>
         )}
 
         {state.mode === 'url' && (
@@ -271,16 +316,26 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
         )}
 
         {state.mode === 'text' && (
-          <label className="block text-sm text-ink-700">
-            <span className={fieldLabelStyles()}>{t('text_label')}</span>
-            <textarea
-              className={textareaStyles()}
-              maxLength={100000}
-              onChange={event => dispatch({ type: 'set_text_content', value: event.target.value })}
-              placeholder={t('text_placeholder')}
-              value={state.textContent}
+          <>
+            <Input
+              label={t('title_label')}
+              maxLength={200}
+              onChange={value => dispatch({ type: 'set_title', value })}
+              placeholder={t('text_title_placeholder')}
+              type="text"
+              value={state.title}
             />
-          </label>
+            <label className="block text-sm text-ink-700">
+              <span className={fieldLabelStyles()}>{t('text_label')}</span>
+              <textarea
+                className={textareaStyles()}
+                maxLength={100000}
+                onChange={event => dispatch({ type: 'set_text_content', value: event.target.value })}
+                placeholder={t('text_placeholder')}
+                value={state.textContent}
+              />
+            </label>
+          </>
         )}
 
         {(state.clientError || props.errorMessage) && (
@@ -297,7 +352,9 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
 
         <div className="flex flex-wrap items-center justify-end gap-3">
           <Button disabled={props.isSubmitting} type="submit" variant="primary">
-            {props.isSubmitting ? t('upload_loading') : t('upload_submit')}
+            {props.isSubmitting
+              ? (state.mode === 'pdf' ? t('upload_loading_pdf') : t('upload_loading'))
+              : (state.mode === 'pdf' ? t('upload_submit_pdf') : t('upload_submit'))}
           </Button>
         </div>
       </form>

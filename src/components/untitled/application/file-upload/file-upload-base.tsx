@@ -260,6 +260,14 @@ export type FileListItemProps = {
   progress: number;
   /** Whether the file failed to upload. */
   failed?: boolean;
+  /** Whether the file completed successfully. */
+  complete?: boolean;
+  /** Optional status label shown next to the icon. */
+  statusLabel?: string;
+  /** Which status icon to render. */
+  statusIcon?: 'complete' | 'failed' | 'processing' | 'uploading';
+  /** Whether to hide the progress bar. */
+  hideProgress?: boolean;
   /** The type of the file. */
   type?: ComponentProps<typeof FileIcon>['type'];
   /** The class name of the file list item. */
@@ -268,12 +276,65 @@ export type FileListItemProps = {
   fileIconVariant?: ComponentProps<typeof FileTypeIcon>['variant'];
   /** The function to call when the file is deleted. */
   onDelete?: () => void;
+  /** The tooltip for the delete button. */
+  deleteLabel?: string;
   /** The function to call when the file upload is retried. */
   onRetry?: () => void;
+  /** The label for the retry action. */
+  retryLabel?: string;
 };
 
-export const FileListItemProgressBar = ({ name, size, progress, failed, type, fileIconVariant, onDelete, onRetry, className }: FileListItemProps) => {
-  const isComplete = progress === 100;
+function renderStatusIcon(statusIcon: NonNullable<FileListItemProps['statusIcon']>) {
+  if (statusIcon === 'complete') {
+    // eslint-disable-next-line tailwindcss/classnames-order, tailwindcss/no-custom-classname
+    return <CheckCircle className="size-4 stroke-[2.5px] text-success-primary" />;
+  }
+
+  if (statusIcon === 'failed') {
+    return <XCircle className="size-4 text-fg-error-primary" />;
+  }
+
+  return <UploadCloud02 className="size-4 stroke-[2.5px] text-fg-quaternary" />;
+}
+
+function getStatusToneClasses(statusIcon: NonNullable<FileListItemProps['statusIcon']>) {
+  if (statusIcon === 'complete') {
+    return 'text-success-primary';
+  }
+
+  if (statusIcon === 'failed') {
+    return 'text-error-primary';
+  }
+
+  return 'text-quaternary';
+}
+
+export const FileListItemProgressBar = ({
+  name,
+  size,
+  progress,
+  failed,
+  complete,
+  statusLabel,
+  statusIcon,
+  hideProgress,
+  type,
+  fileIconVariant,
+  onDelete,
+  deleteLabel,
+  onRetry,
+  retryLabel,
+  className,
+}: FileListItemProps) => {
+  const isComplete = complete ?? progress === 100;
+  const resolvedStatusIcon = statusIcon ?? (failed ? 'failed' : isComplete ? 'complete' : 'uploading');
+  const resolvedStatusLabel = statusLabel
+    ?? (resolvedStatusIcon === 'complete'
+      ? 'Complete'
+      : resolvedStatusIcon === 'failed'
+        ? 'Failed'
+        : 'Uploading...');
+  const shouldShowProgress = hideProgress !== undefined ? !hideProgress : !failed;
 
   return (
     <motion.li
@@ -298,22 +359,25 @@ export const FileListItemProgressBar = ({ name, size, progress, failed, type, fi
               <hr className="h-3 w-px rounded-t-full rounded-b-full border-none bg-border-primary" />
 
               <div className="flex items-center gap-1">
-                {isComplete && <CheckCircle className="text-fg-success-primary size-4 stroke-[2.5px]" />}
-                {isComplete && <p className="text-success-primary text-sm font-medium">Complete</p>}
-
-                {!isComplete && !failed && <UploadCloud02 className="stroke-[2.5px size-4 text-fg-quaternary" />}
-                {!isComplete && !failed && <p className="text-sm font-medium text-quaternary">Uploading...</p>}
-
-                {failed && <XCircle className="size-4 text-fg-error-primary" />}
-                {failed && <p className="text-sm font-medium text-error-primary">Failed</p>}
+                {renderStatusIcon(resolvedStatusIcon)}
+                <p className={cx('text-sm font-medium', getStatusToneClasses(resolvedStatusIcon))}>{resolvedStatusLabel}</p>
               </div>
             </div>
           </div>
 
-          <ButtonUtility color="tertiary" tooltip="Delete" icon={Trash01} size="xs" className="-mt-2 -mr-2 self-start" onClick={onDelete} />
+          {onDelete && (
+            <ButtonUtility
+              color="tertiary"
+              tooltip={deleteLabel ?? 'Delete'}
+              icon={Trash01}
+              size="xs"
+              className="-mt-2 -mr-2 self-start"
+              onClick={onDelete}
+            />
+          )}
         </div>
 
-        {!failed && (
+        {shouldShowProgress && (
           <div className="mt-1 w-full">
             <ProgressBar labelPosition="right" max={100} min={0} value={progress} />
           </div>
@@ -321,7 +385,7 @@ export const FileListItemProgressBar = ({ name, size, progress, failed, type, fi
 
         {failed && (
           <Button color="link-destructive" size="sm" onClick={onRetry} className="mt-1.5">
-            Try again
+            {retryLabel ?? 'Try again'}
           </Button>
         )}
       </div>
@@ -329,8 +393,32 @@ export const FileListItemProgressBar = ({ name, size, progress, failed, type, fi
   );
 };
 
-export const FileListItemProgressFill = ({ name, size, progress, failed, type, fileIconVariant, onDelete, onRetry, className }: FileListItemProps) => {
-  const isComplete = progress === 100;
+export const FileListItemProgressFill = ({
+  name,
+  size,
+  progress,
+  failed,
+  complete,
+  statusLabel,
+  statusIcon,
+  hideProgress,
+  type,
+  fileIconVariant,
+  onDelete,
+  deleteLabel,
+  onRetry,
+  retryLabel,
+  className,
+}: FileListItemProps) => {
+  const isComplete = complete ?? progress === 100;
+  const resolvedStatusIcon = statusIcon ?? (failed ? 'failed' : isComplete ? 'complete' : 'uploading');
+  const resolvedStatusLabel = statusLabel
+    ?? (resolvedStatusIcon === 'complete'
+      ? 'Complete'
+      : resolvedStatusIcon === 'failed'
+        ? 'Failed'
+        : 'Uploading...');
+  const shouldShowProgress = hideProgress !== undefined ? !hideProgress : !failed;
 
   return (
     <motion.li layout="position" className={cx('relative flex gap-3 overflow-hidden rounded-xl bg-primary p-4', className)}>
@@ -359,19 +447,14 @@ export const FileListItemProgressFill = ({ name, size, progress, failed, type, f
             <p className="truncate text-sm font-medium text-secondary">{name}</p>
 
             <div className="mt-0.5 flex items-center gap-2">
-              <p className="text-sm text-tertiary">{failed ? 'Upload failed, please try again' : getReadableFileSize(size)}</p>
+              <p className="text-sm text-tertiary">{failed ? resolvedStatusLabel : getReadableFileSize(size)}</p>
 
-              {!failed && (
+              {shouldShowProgress && (
                 <>
                   <hr className="h-3 w-px rounded-t-full rounded-b-full border-none bg-border-primary" />
                   <div className="flex items-center gap-1">
-                    {isComplete && <CheckCircle className="text-fg-success-primary size-4 stroke-[2.5px]" />}
-                    {!isComplete && <UploadCloud02 className="size-4 stroke-[2.5px] text-fg-quaternary" />}
-
-                    <p className="text-sm text-tertiary">
-                      {progress}
-                      %
-                    </p>
+                    {renderStatusIcon(resolvedStatusIcon)}
+                    <p className={cx('text-sm', getStatusToneClasses(resolvedStatusIcon))}>{resolvedStatusLabel}</p>
                   </div>
                 </>
               )}
@@ -380,12 +463,21 @@ export const FileListItemProgressFill = ({ name, size, progress, failed, type, f
 
           {failed && (
             <Button color="link-destructive" size="sm" onClick={onRetry} className="mt-1.5">
-              Try again
+              {retryLabel ?? 'Try again'}
             </Button>
           )}
         </div>
 
-        <ButtonUtility color="tertiary" tooltip="Delete" icon={Trash01} size="xs" className="-mt-2 -mr-2 self-start" onClick={onDelete} />
+        {onDelete && (
+          <ButtonUtility
+            color="tertiary"
+            tooltip={deleteLabel ?? 'Delete'}
+            icon={Trash01}
+            size="xs"
+            className="-mt-2 -mr-2 self-start"
+            onClick={onDelete}
+          />
+        )}
       </div>
     </motion.li>
   );

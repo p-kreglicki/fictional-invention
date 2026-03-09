@@ -101,8 +101,12 @@ export function DashboardAddContentModal(props: DashboardAddContentModalProps) {
             <section className={panelStyles({ tone: 'muted', className: 'sm:p-5' })}>
               <DocumentUploadPanel
                 errorMessage={documentsWorkspace.errorMessage}
+                onDismissPdfUpload={documentsWorkspace.dismissPdfUpload}
+                onQueuePdfFiles={documentsWorkspace.queuePdfFiles}
+                onRetryPdfUpload={documentsWorkspace.retryPdfUpload}
+                onStartPdfUploads={documentsWorkspace.startPdfUploads}
                 isSubmitting={documentsWorkspace.isUploading}
-                onSubmitPdf={documentsWorkspace.submitPdf}
+                pdfUploads={documentsWorkspace.pdfUploadItems}
                 onSubmitText={documentsWorkspace.submitText}
                 onSubmitUrl={documentsWorkspace.submitUrl}
                 resetKey={documentsWorkspace.uploadResetKey}
