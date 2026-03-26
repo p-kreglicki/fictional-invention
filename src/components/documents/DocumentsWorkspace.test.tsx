@@ -45,9 +45,9 @@ class MockXMLHttpRequest {
     this.dispatch('abort');
   }
 
-  emitProgress(loaded: number, total: number) {
+  emitProgress(loaded: number, total: number, input: { lengthComputable?: boolean } = {}) {
     const event = {
-      lengthComputable: true,
+      lengthComputable: input.lengthComputable ?? true,
       loaded,
       total,
     } as ProgressEvent<EventTarget>;
@@ -272,6 +272,55 @@ describe('DocumentsWorkspace', () => {
 
     expect(MockXMLHttpRequest.instances[0]!.url.endsWith('/en/api/documents/upload')).toBe(true);
     expect(MockXMLHttpRequest.instances[1]!.url.endsWith('/en/api/documents/upload')).toBe(true);
+  });
+
+  it('uses file size as a fallback when upload progress is not length-computable', async () => {
+    let documents = [createDocument()];
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/en/api/documents') && method === 'GET') {
+        return createJsonResponse({ documents });
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <DocumentsWorkspace />
+      </NextIntlClientProvider>,
+    );
+
+    queuePdfFiles([
+      new File(['1234567890'], 'fallback-progress.pdf', { type: 'application/pdf' }),
+    ]);
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(1);
+    });
+
+    MockXMLHttpRequest.instances[0]!.emitProgress(5, 0, { lengthComputable: false });
+
+    await expect.element(page.getByText('50%')).toBeInTheDocument();
+
+    documents = [
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440034',
+        title: 'fallback-progress',
+        status: 'ready',
+        originalFilename: 'fallback-progress.pdf',
+        createdAt: '2026-03-07T12:10:00.000Z',
+        processedAt: '2026-03-07T12:11:00.000Z',
+      }),
+      ...documents,
+    ];
+    MockXMLHttpRequest.instances[0]!.respond(202, { documentId: '550e8400-e29b-41d4-a716-446655440034', status: 'uploading' });
+    await flushAsyncWork();
+
+    await expect.element(page.getByText(contentMessages.upload_status_completed)).toBeInTheDocument();
   });
 
   it('appends PDFs added during an active upload and continues the queue automatically', async () => {

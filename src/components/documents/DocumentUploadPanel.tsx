@@ -255,10 +255,10 @@ export function DocumentUploadPanel(props: DocumentUploadPanelProps) {
                 props.onQueuePdfFiles(files);
               }}
               onDropUnacceptedFiles={() => {
-                dispatch({ type: 'set_client_error', value: t('upload_validation_error') });
+                dispatch({ type: 'set_client_error', value: t('pdf_invalid_type_error') });
               }}
               onSizeLimitExceed={() => {
-                dispatch({ type: 'set_client_error', value: t('upload_validation_error') });
+                dispatch({ type: 'set_client_error', value: t('pdf_file_too_large_error') });
               }}
             />
 

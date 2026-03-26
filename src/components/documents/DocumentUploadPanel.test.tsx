@@ -108,7 +108,7 @@ describe('DocumentUploadPanel', () => {
     await expect.element(page.getByRole('textbox', { name: contentMessages.title_label })).not.toBeInTheDocument();
   });
 
-  it('shows a validation error for rejected or oversized PDF selections', async () => {
+  it('shows specific validation errors for rejected or oversized PDF selections', async () => {
     const onQueuePdfFiles = vi.fn();
 
     await render(
@@ -131,14 +131,14 @@ describe('DocumentUploadPanel', () => {
       new File(['text'], 'notes.txt', { type: 'text/plain' }),
     ]);
 
-    await expect.element(page.getByText(contentMessages.upload_validation_error)).toBeInTheDocument();
+    await expect.element(page.getByText(contentMessages.pdf_invalid_type_error)).toBeInTheDocument();
     expect(onQueuePdfFiles).not.toHaveBeenCalled();
 
     selectFiles([
       new File([new Uint8Array((10 * 1024 * 1024) + 1)], 'oversized.pdf', { type: 'application/pdf' }),
     ]);
 
-    await expect.element(page.getByText(contentMessages.upload_validation_error)).toBeInTheDocument();
+    await expect.element(page.getByText(contentMessages.pdf_file_too_large_error)).toBeInTheDocument();
     expect(onQueuePdfFiles).not.toHaveBeenCalled();
   });
 

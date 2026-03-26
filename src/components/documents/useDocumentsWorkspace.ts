@@ -80,12 +80,18 @@ function createPdfUploadSessionItem(file: File): PdfUploadSessionItem {
   };
 }
 
-function getProgressPercentage(loaded: number, total: number) {
-  if (total <= 0) {
+function getProgressPercentage(input: {
+  loaded: number;
+  total: number;
+  fallbackTotal?: number;
+}) {
+  const resolvedTotal = input.total > 0 ? input.total : (input.fallbackTotal ?? 0);
+
+  if (resolvedTotal <= 0 || input.loaded <= 0) {
     return 0;
   }
 
-  return Math.min(99, Math.max(0, Math.round((loaded / total) * 100)));
+  return Math.min(99, Math.max(0, Math.round((input.loaded / resolvedTotal) * 100)));
 }
 
 function parseUploadPayload(responseText: string): UploadResponsePayload {
@@ -118,11 +124,11 @@ function createPdfUploadRequest(input: {
     xhr.responseType = 'text';
 
     xhr.upload.addEventListener('progress', (event) => {
-      if (!event.lengthComputable) {
-        return;
-      }
-
-      input.onProgress(getProgressPercentage(event.loaded, event.total));
+      input.onProgress(getProgressPercentage({
+        loaded: event.loaded,
+        total: event.lengthComputable ? event.total : 0,
+        fallbackTotal: input.file.size,
+      }));
     });
 
     xhr.addEventListener('load', () => {

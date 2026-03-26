@@ -179,6 +179,8 @@
     "text_label": "Paste text",
     "text_placeholder": "Paste text that has at least 100 characters.",
     "pdf_missing_file": "Choose a PDF file before uploading.",
+    "pdf_invalid_type_error": "Hmm... this is not a PDF file.",
+    "pdf_file_too_large_error": "I'm sorry, this file is too big, my limit is 10MB",
     "url_missing_value": "Enter a URL.",
     "text_missing_value": "Add a title and enough text before uploading.",
     "upload_validation_error": "Please check the upload fields and try again.",

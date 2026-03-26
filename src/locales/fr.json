@@ -179,6 +179,8 @@
     "text_label": "Coller du texte",
     "text_placeholder": "Collez au moins 100 caractères de contenu d'étude en italien.",
     "pdf_missing_file": "Choisissez un fichier PDF avant l'import.",
+    "pdf_invalid_type_error": "Hum... ce fichier n'est pas un PDF.",
+    "pdf_file_too_large_error": "Je suis désolé, ce fichier est trop volumineux, ma limite est de 10 Mo.",
     "url_missing_value": "Saisissez une URL avant l'import.",
     "text_missing_value": "Ajoutez un titre et suffisamment de texte avant l'import.",
     "upload_validation_error": "Vérifiez les champs d'import avant de continuer.",
