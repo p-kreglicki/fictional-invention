@@ -37,8 +37,10 @@ jobs:
         run: npm run build-local
         env:
           NEXT_PUBLIC_SENTRY_DISABLED: 'true' # Only upload Sentry source maps in deployment
-          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # Dependabot PRs do not receive repository secrets, but the build only
+          # needs non-empty values to satisfy env validation.
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || 'sk_ci_placeholder' }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_ci_placeholder' }}
 
       - if: matrix.node-version == '22.x' && success()
         name: Cache Next.js build output
@@ -67,7 +69,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - if: github.event_name == 'pull_request'
+      - if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         name: Validate all commits from PR
         run: npx commitlint --from $BASE_SHA --to $HEAD_SHA --verbose
         env:
@@ -110,6 +112,7 @@ jobs:
           args: npm run test -- --coverage
 
       - name: Upload coverage reports to Codecov
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v6
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -146,6 +149,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build]
+    if: ${{ secrets.CLERK_SECRET_KEY != '' && (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '') }}
     env:
       CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
 
