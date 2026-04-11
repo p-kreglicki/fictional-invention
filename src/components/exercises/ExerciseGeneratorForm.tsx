@@ -44,10 +44,11 @@ export function ExerciseGeneratorForm(props: ExerciseGeneratorFormProps) {
     initialItems: [],
     getKey: item => item.id,
   });
+  const selectedDocumentItems = selectedDocuments.items;
 
   useEffect(() => {
     const availableDocumentIds = new Set(documentOptions.map(option => option.id));
-    const staleSelectedDocumentIds = selectedDocuments.items
+    const staleSelectedDocumentIds = selectedDocumentItems
       .map(item => item.id)
       .filter(id => !availableDocumentIds.has(id));
 
@@ -55,7 +56,7 @@ export function ExerciseGeneratorForm(props: ExerciseGeneratorFormProps) {
       selectedDocuments.remove(...staleSelectedDocumentIds);
     }
 
-    for (const selectedDocument of selectedDocuments.items) {
+    for (const selectedDocument of selectedDocumentItems) {
       const nextOption = documentOptionsById.get(selectedDocument.id);
 
       if (!nextOption) {
@@ -69,9 +70,9 @@ export function ExerciseGeneratorForm(props: ExerciseGeneratorFormProps) {
         selectedDocuments.update(selectedDocument.id, nextOption);
       }
     }
-  }, [documentOptions, documentOptionsById, selectedDocuments]);
+  }, [documentOptions, documentOptionsById, selectedDocumentItems]);
 
-  const activeSelectedDocumentIds = selectedDocuments.items.map(item => item.id);
+  const activeSelectedDocumentIds = selectedDocumentItems.map(item => item.id);
   const documentsFieldKey = documentOptions
     .map(option => `${option.id}:${option.label}:${option.supportingText ?? ''}`)
     .join('|');

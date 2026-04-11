@@ -390,7 +390,7 @@ describe('DocumentsWorkspace', () => {
     MockXMLHttpRequest.instances[0]!.emitTimeout();
     await flushAsyncWork();
 
-    await expect.element(page.getByText(contentMessages.upload_status_failed)).toBeInTheDocument();
+    await expect.element(page.getByText(contentMessages.upload_status_failed, { exact: true })).toBeInTheDocument();
 
     await vi.waitFor(() => {
       expect(MockXMLHttpRequest.instances).toHaveLength(2);
@@ -655,6 +655,83 @@ describe('DocumentsWorkspace', () => {
     await expect.element(page.getByText(contentMessages.upload_status_completed)).toBeInTheDocument();
   });
 
+  it('keeps a retrying upload in processing while polling refreshes stale document data', async () => {
+    vi.useFakeTimers();
+
+    let documents: DocumentListItem[] = [];
+    let resolveDelete: (() => void) | undefined;
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/en/api/documents') && method === 'GET') {
+        return Promise.resolve(createJsonResponse({ documents }));
+      }
+
+      if (url.endsWith('/en/api/documents/550e8400-e29b-41d4-a716-446655440023') && method === 'DELETE') {
+        return new Promise((resolve) => {
+          resolveDelete = () => {
+            documents = documents.filter(document => document.id !== '550e8400-e29b-41d4-a716-446655440023');
+            resolve(createJsonResponse({ success: true }));
+          };
+        });
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${method} ${url}`));
+    });
+
+    await renderWorkspace();
+
+    queuePdfFiles([
+      new File(['retry'], 'retry.pdf', { type: 'application/pdf' }),
+    ]);
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(1);
+    });
+
+    documents = [
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440023',
+        title: 'retry',
+        status: 'failed',
+        errorMessage: 'PDF extraction failed',
+        originalFilename: 'retry.pdf',
+        createdAt: '2026-03-07T11:00:00.000Z',
+      }),
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440081',
+        title: 'Processing article',
+        contentType: 'url',
+        originalFilename: null,
+        sourceUrl: 'https://example.com/article',
+        status: 'processing',
+        createdAt: '2026-03-07T11:01:00.000Z',
+      }),
+    ];
+    MockXMLHttpRequest.instances[0]!.respond(202, { documentId: '550e8400-e29b-41d4-a716-446655440023', status: 'uploading' });
+    await flushAsyncWork();
+
+    await expect.element(page.getByText('PDF extraction failed')).toBeInTheDocument();
+
+    await page.getByRole('button', { name: contentMessages.upload_retry }).click();
+
+    await expect.element(page.getByRole('button', { name: contentMessages.upload_retry })).not.toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await flushAsyncWork();
+
+    await expect.element(page.getByRole('button', { name: contentMessages.upload_retry })).not.toBeInTheDocument();
+
+    resolveDelete?.();
+    await flushAsyncWork();
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(2);
+    });
+  });
+
   it('deletes a document after confirmation', async () => {
     let documents = [
       createDocument(),
@@ -694,6 +771,44 @@ describe('DocumentsWorkspace', () => {
     await page.getByRole('button', { name: contentMessages.delete_confirm }).click();
 
     await expect.element(page.getByText('Obsolete notes')).not.toBeInTheDocument();
+  });
+
+  it('shows the fallback delete error when the server returns non-json', async () => {
+    const documents = [
+      createDocument(),
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440011',
+        title: 'Obsolete notes',
+        createdAt: '2026-03-07T10:00:00.000Z',
+      }),
+    ];
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/en/api/documents') && method === 'GET') {
+        return createJsonResponse({ documents });
+      }
+
+      if (url.endsWith('/en/api/documents/550e8400-e29b-41d4-a716-446655440011') && method === 'DELETE') {
+        return new Response('<html>bad gateway</html>', {
+          status: 502,
+          headers: {
+            'Content-Type': 'text/html',
+          },
+        });
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await renderWorkspace();
+
+    await page.getByRole('button', { name: contentMessages.delete_button }).nth(1).click();
+    await page.getByRole('button', { name: contentMessages.delete_confirm }).click();
+
+    await expect.element(page.getByText(contentMessages.delete_error)).toBeInTheDocument();
   });
 
   it('polls documents while processing remains active', async () => {

@@ -4,7 +4,7 @@
 import type { FileIcon } from '@untitledui/file-icons';
 import type { ComponentProps, ComponentPropsWithRef } from 'react';
 import { FileIcon as FileTypeIcon } from '@untitledui/file-icons';
-import { CheckCircle, Trash01, UploadCloud02, XCircle } from '@untitledui/icons';
+import { CheckCircle, Hourglass03, Trash01, UploadCloud02, XCircle } from '@untitledui/icons';
 import { AnimatePresence, motion } from 'motion/react';
 import { useId, useRef, useState } from 'react';
 import { Button } from '@/components/untitled/base/buttons/button';
@@ -293,6 +293,10 @@ function renderStatusIcon(statusIcon: NonNullable<FileListItemProps['statusIcon'
     return <XCircle className="size-4 text-fg-error-primary" />;
   }
 
+  if (statusIcon === 'processing') {
+    return <Hourglass03 className="size-4 stroke-[2.5px] text-warning-600" />;
+  }
+
   return <UploadCloud02 className="size-4 stroke-[2.5px] text-fg-quaternary" />;
 }
 
@@ -305,6 +309,10 @@ function getStatusToneClasses(statusIcon: NonNullable<FileListItemProps['statusI
     return 'text-error-primary';
   }
 
+  if (statusIcon === 'processing') {
+    return 'text-warning-700';
+  }
+
   return 'text-quaternary';
 }
 
@@ -315,6 +323,10 @@ function getProgressFillClasses(statusIcon: NonNullable<FileListItemProps['statu
 
   if (statusIcon === 'failed') {
     return 'bg-error-600';
+  }
+
+  if (statusIcon === 'processing') {
+    return 'bg-warning-500';
   }
 
   return undefined;

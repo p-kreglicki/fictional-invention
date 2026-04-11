@@ -108,6 +108,19 @@ function parseUploadPayload(responseText: string): UploadResponsePayload {
   }
 }
 
+async function parseOptionalJsonResponse<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    return null;
+  }
+
+  try {
+    return await response.json() as T;
+  } catch {
+    return null;
+  }
+}
+
 function createPdfUploadRequest(input: {
   apiBasePath: string;
   file: File;
@@ -173,6 +186,20 @@ function updatePdfUploadItem(
   return items.map(item => (item.id === uploadId ? updater(item) : item));
 }
 
+function clearActivePdfUploadState(input: {
+  isMountedRef: React.RefObject<boolean>;
+  setActivePdfUploadId: React.Dispatch<React.SetStateAction<string | null>>;
+  uploadId: string;
+}) {
+  if (!input.isMountedRef.current) {
+    return;
+  }
+
+  input.setActivePdfUploadId(currentUploadId => (
+    currentUploadId === input.uploadId ? null : currentUploadId
+  ));
+}
+
 export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) {
   const locale = useLocale();
   const t = useTranslations('DashboardContentPage');
@@ -187,6 +214,7 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSubmittingNonPdf, setIsSubmittingNonPdf] = useState(false);
   const [isPdfQueueRunning, setIsPdfQueueRunning] = useState(false);
+  const [activePdfUploadId, setActivePdfUploadId] = useState<string | null>(null);
   const [isRetryingPdfReplacement, setIsRetryingPdfReplacement] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -234,14 +262,14 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
     const response = await fetch(`${apiBasePath}/documents/${documentId}`, {
       method: 'DELETE',
     });
-    const payload = await response.json() as {
+    const payload = await parseOptionalJsonResponse<{
       error?: string;
       message?: string;
       success?: boolean;
-    };
+    }>(response);
 
-    if (!response.ok || !payload.success) {
-      throw new Error(payload.message ?? t('delete_error'));
+    if (!response.ok || !payload?.success) {
+      throw new Error(payload?.message ?? t('delete_error'));
     }
   }
 
@@ -408,6 +436,8 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
       uploadId: nextQueuedItem.id,
       abort: request.abort,
     };
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
+    setActivePdfUploadId(nextQueuedItem.id);
 
     void request.promise.then(async ({ ok, payload }) => {
       if (!isMountedRef.current) {
@@ -451,6 +481,11 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
       })));
     }).finally(() => {
       currentPdfUploadRef.current = null;
+      clearActivePdfUploadState({
+        isMountedRef,
+        setActivePdfUploadId,
+        uploadId: nextQueuedItem.id,
+      });
     });
   });
 
@@ -460,7 +495,7 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
   });
 
   useEffect(() => {
-    if (!isPdfQueueRunning || currentPdfUploadRef.current) {
+    if (!isPdfQueueRunning || activePdfUploadId) {
       return;
     }
 
@@ -472,7 +507,7 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
     }
 
     startNextQueuedPdfUpload(nextQueuedItem);
-  }, [isPdfQueueRunning, pdfUploadItems, startNextQueuedPdfUpload, stopPdfQueue]);
+  }, [activePdfUploadId, isPdfQueueRunning, pdfUploadItems, startNextQueuedPdfUpload, stopPdfQueue]);
 
   async function submitUrl(input: { url: string; title: string }) {
     setIsSubmittingNonPdf(true);
@@ -579,7 +614,7 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
     pdfUploadItems,
     isBootstrapping,
     isDeleting,
-    isUploading: isSubmittingNonPdf || isRetryingPdfReplacement || currentPdfUploadRef.current !== null,
+    isUploading: isSubmittingNonPdf || isRetryingPdfReplacement || isPdfQueueRunning || activePdfUploadId !== null,
     statusMessage,
     errorMessage,
     deleteErrorMessage,
@@ -593,7 +628,7 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
     },
     confirmDelete,
     dismissPdfUpload: (uploadId: string) => {
-      if (currentPdfUploadRef.current?.uploadId === uploadId) {
+      if (activePdfUploadId === uploadId) {
         return;
       }
 
@@ -624,24 +659,27 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
       setErrorMessage(null);
 
       if (targetUpload.documentId) {
+        const retryDocumentId = targetUpload.documentId;
         setIsRetryingPdfReplacement(true);
         setPdfUploadItems(currentItems => updatePdfUploadItem(currentItems, uploadId, item => ({
           ...item,
+          documentId: null,
           phase: 'processing',
           errorMessage: null,
         })));
 
         try {
-          await deleteDocumentById(targetUpload.documentId);
+          await deleteDocumentById(retryDocumentId);
           const nextDocuments = await refreshDocuments();
           await props.onDeleteSuccess?.({
-            deletedDocumentId: targetUpload.documentId,
+            deletedDocumentId: retryDocumentId,
             nextDocuments,
           });
         } catch (error) {
           const nextErrorMessage = error instanceof Error ? error.message : t('delete_error');
           setPdfUploadItems(currentItems => updatePdfUploadItem(currentItems, uploadId, item => ({
             ...item,
+            documentId: retryDocumentId,
             phase: 'failed',
             errorMessage: nextErrorMessage,
           })));
