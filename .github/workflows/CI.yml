@@ -70,7 +70,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - if: github.event_name == 'pull_request'
+      - if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         name: Validate all commits from PR
         run: npx commitlint --from $BASE_SHA --to $HEAD_SHA --verbose
         env:
@@ -116,7 +116,8 @@ jobs:
           args: npm run test -- --coverage
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v6
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -152,6 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build]
+    if: ${{ secrets.CLERK_SECRET_KEY != '' && (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '') }}
     env:
       CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
 
