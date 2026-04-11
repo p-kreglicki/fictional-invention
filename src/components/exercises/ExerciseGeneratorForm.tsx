@@ -1,14 +1,16 @@
 'use client';
 
+import type { SelectItemType } from '@/components/untitled/base/select/select';
 import type { DocumentListItem } from '@/validations/DocumentValidation';
 import type { GenerateExercisesRequest } from '@/validations/ExerciseValidation';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useListData } from 'react-stately';
 import { Button } from '@/components/ui/Button';
-import { Checkbox } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { panelStyles } from '@/components/ui/styles';
+import { MultiSelect } from '@/components/untitled/base/select/multi-select';
 import { GenerateExercisesRequestSchema } from '@/validations/ExerciseValidation';
 
 type ExerciseGeneratorFormProps = {
@@ -20,14 +22,59 @@ type ExerciseGeneratorFormProps = {
 
 export function ExerciseGeneratorForm(props: ExerciseGeneratorFormProps) {
   const t = useTranslations('DashboardExercisesPage');
-  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [exerciseType, setExerciseType] = useState<GenerateExercisesRequest['exerciseType']>('multiple_choice');
   const [count, setCount] = useState(5);
   const [difficulty, setDifficulty] = useState<GenerateExercisesRequest['difficulty']>();
   const [topicFocus, setTopicFocus] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
-  const availableDocumentIds = new Set(props.documents.map(document => document.id));
-  const activeSelectedDocumentIds = selectedDocumentIds.filter(id => availableDocumentIds.has(id));
+
+  const documentOptions = useMemo<SelectItemType[]>(() => (
+    props.documents.map(document => ({
+      id: document.id,
+      label: document.title,
+      supportingText: t(`document_type_${document.contentType}`),
+    }))
+  ), [props.documents, t]);
+
+  const documentOptionsById = useMemo(() => (
+    new Map(documentOptions.map(option => [option.id, option]))
+  ), [documentOptions]);
+
+  const selectedDocuments = useListData<SelectItemType>({
+    initialItems: [],
+    getKey: item => item.id,
+  });
+
+  useEffect(() => {
+    const availableDocumentIds = new Set(documentOptions.map(option => option.id));
+    const staleSelectedDocumentIds = selectedDocuments.items
+      .map(item => item.id)
+      .filter(id => !availableDocumentIds.has(id));
+
+    if (staleSelectedDocumentIds.length > 0) {
+      selectedDocuments.remove(...staleSelectedDocumentIds);
+    }
+
+    for (const selectedDocument of selectedDocuments.items) {
+      const nextOption = documentOptionsById.get(selectedDocument.id);
+
+      if (!nextOption) {
+        continue;
+      }
+
+      if (
+        selectedDocument.label !== nextOption.label
+        || selectedDocument.supportingText !== nextOption.supportingText
+      ) {
+        selectedDocuments.update(selectedDocument.id, nextOption);
+      }
+    }
+  }, [documentOptions, documentOptionsById, selectedDocuments]);
+
+  const activeSelectedDocumentIds = selectedDocuments.items.map(item => item.id);
+  const documentsFieldKey = documentOptions
+    .map(option => `${option.id}:${option.label}:${option.supportingText ?? ''}`)
+    .join('|');
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,48 +96,27 @@ export function ExerciseGeneratorForm(props: ExerciseGeneratorFormProps) {
     await props.onSubmit(parsed.data);
   }
 
-  function toggleDocumentSelection(documentId: string) {
-    setSelectedDocumentIds((current) => {
-      if (current.includes(documentId)) {
-        return current.filter(id => id !== documentId);
-      }
-
-      return [...current, documentId];
-    });
-  }
-
   return (
     <form className={panelStyles({ className: 'space-y-5' })} onSubmit={handleSubmit}>
       <div>
-        <p className="text-sm font-semibold text-ink-900">{t('documents_label')}</p>
-        <p className="mt-1 text-sm text-ink-600">{t('documents_help')}</p>
-        <div className="mt-3 space-y-2">
-          {props.documents.map(document => (
-            <Checkbox
-              key={document.id}
-              className="rounded-lg border border-ink-100 bg-ink-50/75 px-4 py-3"
-              isSelected={activeSelectedDocumentIds.includes(document.id)}
-              label={(
-                <span>
-                  {document.title}
-                  {' '}
-                  <span className="text-ink-500">
-                    (
-                    {t(`document_type_${document.contentType}`)}
-                    )
-                  </span>
-                </span>
-              )}
-              onChange={() => toggleDocumentSelection(document.id)}
-            />
-          ))}
-          {props.documents.length === 0 && (
-            <p className="text-sm text-ink-500">{t('no_ready_documents')}</p>
-          )}
-        </div>
+        <MultiSelect
+          key={documentsFieldKey}
+          isDisabled={props.documents.length === 0}
+          items={documentOptions}
+          label={t('documents_label')}
+          hint={t('documents_help')}
+          placeholder={t('documents_search_placeholder')}
+          selectedItems={selectedDocuments}
+        >
+          {item => <MultiSelect.Item {...item} />}
+        </MultiSelect>
+
+        {props.documents.length === 0 && (
+          <p className="mt-2 text-sm text-ink-500">{t('no_ready_documents')}</p>
+        )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-4">
         <Select
           label={t('exercise_type_label')}
           onChange={event => setExerciseType(event.target.value as GenerateExercisesRequest['exerciseType'])}

@@ -13,6 +13,13 @@ export function DocumentsWorkspace() {
 
   return (
     <div className="space-y-6 py-6">
+      <header className="flex flex-col gap-5">
+        <div className="max-w-5xl">
+          <h1 className="text-3xl font-semibold text-ink-950 sm:text-4xl">{t('title')}</h1>
+          <p className="mt-3 max-w-4xl text-sm leading-7 text-ink-600 sm:text-base">{t('description')}</p>
+        </div>
+      </header>
+
       <DocumentUploadPanel
         errorMessage={documentsWorkspace.errorMessage}
         onDismissPdfUpload={documentsWorkspace.dismissPdfUpload}

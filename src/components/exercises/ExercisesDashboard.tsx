@@ -4,12 +4,12 @@ import type { ExerciseCardItem } from './ExerciseCards';
 import type { ExerciseGenerationJobStatus } from './GenerationJobStatus';
 import type { DocumentListItem } from '@/validations/DocumentValidation';
 import type { ExerciseLatestResponse } from '@/validations/ResponseValidation';
-import { ArrowRight, FileSearch03, TrendUp02 } from '@untitledui/icons';
+import { ArrowRight } from '@untitledui/icons';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { createPollingGate } from '@/components/exercises/PollingGate';
-import { badgeStyles, buttonStyles, panelStyles } from '@/components/ui/styles';
+import { buttonStyles, panelStyles } from '@/components/ui/styles';
 import { Link } from '@/libs/I18nNavigation';
 import { DocumentListItemSchema } from '@/validations/DocumentValidation';
 import { ExerciseCardSchema, SubmitResponseSuccessSchema } from '@/validations/ResponseValidation';
@@ -322,23 +322,10 @@ export function ExercisesDashboard() {
 
   return (
     <div className="space-y-6 py-5">
-      <header className={panelStyles({ tone: 'strong' })}>
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <span className={badgeStyles({ tone: 'brand', uppercase: true })}>{t('jobs_title')}</span>
-            <h1 className="mt-4 text-3xl font-semibold text-ink-950 sm:text-4xl">{t('title')}</h1>
-            <p className="mt-3 text-sm leading-7 text-ink-600">{t('description')}</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <article className="rounded-[1.5rem] border border-white/90 bg-white/80 p-4 shadow-xs">
-              <TrendUp02 className="h-5 w-5 text-brand-600" />
-              <p className="mt-4 text-xs font-semibold tracking-[0.18em] text-ink-500 uppercase">{t('results_title')}</p>
-            </article>
-            <article className="rounded-[1.5rem] border border-white/90 bg-white/80 p-4 shadow-xs">
-              <FileSearch03 className="h-5 w-5 text-brand-600" />
-              <p className="mt-4 text-xs font-semibold tracking-[0.18em] text-ink-500 uppercase">{t('documents_label')}</p>
-            </article>
-          </div>
+      <header className="flex flex-col gap-5">
+        <div className="max-w-5xl">
+          <h1 className="text-3xl font-semibold text-ink-950 sm:text-4xl">{t('title')}</h1>
+          <p className="mt-3 max-w-4xl text-sm leading-7 text-ink-600 sm:text-base">{t('description')}</p>
         </div>
       </header>
 
@@ -368,13 +355,10 @@ export function ExercisesDashboard() {
         </section>
       )}
 
-      {readyDocuments.length > 0 && (processingDocumentsCount > 0 || failedDocumentsCount > 0) && (
+      {readyDocuments.length > 0 && processingDocumentsCount > 0 && (
         <section className={panelStyles({ tone: 'muted', className: 'text-sm text-ink-600' })}>
           {processingDocumentsCount > 0 && (
             <p>{t('state_partial_processing', { count: processingDocumentsCount })}</p>
-          )}
-          {failedDocumentsCount > 0 && (
-            <p>{t('state_partial_failed', { count: failedDocumentsCount })}</p>
           )}
         </section>
       )}
