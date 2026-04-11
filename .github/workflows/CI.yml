@@ -38,9 +38,10 @@ jobs:
         env:
           NEXT_PUBLIC_SENTRY_DISABLED: 'true' # Only upload Sentry source maps in deployment
           # Dependabot PRs do not receive repository secrets, but the build only
-          # needs non-empty values to satisfy env validation.
-          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || 'sk_ci_placeholder' }}
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_ci_placeholder' }}
+          # needs structurally valid placeholder keys to satisfy env validation
+          # and Clerk's prerender-time key parsing.
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || 'sk_test_placeholder' }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuZXhhbXBsZS5jb20k' }}
 
       - if: matrix.node-version == '22.x' && success()
         name: Cache Next.js build output
