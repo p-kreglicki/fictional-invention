@@ -1,5 +1,6 @@
 import type { DocumentListItem } from '@/validations/DocumentValidation';
 import { NextIntlClientProvider } from 'next-intl';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
@@ -15,6 +16,7 @@ class MockXMLHttpRequest {
   method = '';
   responseText = '';
   status = 0;
+  timeout = 0;
   url = '';
   uploadListeners: Array<(event: ProgressEvent<EventTarget>) => void> = [];
   listeners = new Map<string, Array<() => void>>();
@@ -63,6 +65,10 @@ class MockXMLHttpRequest {
 
   fail() {
     this.dispatch('error');
+  }
+
+  emitTimeout() {
+    this.dispatch('timeout');
   }
 
   private dispatch(type: string) {
@@ -129,6 +135,16 @@ function queuePdfFiles(files: File[]) {
 async function flushAsyncWork() {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function renderWorkspace(input: { useStrictMode?: boolean } = {}) {
+  const content = (
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <DocumentsWorkspace />
+    </NextIntlClientProvider>
+  );
+
+  await render(input.useStrictMode ? <StrictMode>{content}</StrictMode> : content);
 }
 
 describe('DocumentsWorkspace', () => {
@@ -272,6 +288,134 @@ describe('DocumentsWorkspace', () => {
 
     expect(MockXMLHttpRequest.instances[0]!.url.endsWith('/en/api/documents/upload')).toBe(true);
     expect(MockXMLHttpRequest.instances[1]!.url.endsWith('/en/api/documents/upload')).toBe(true);
+  });
+
+  it('continues queued PDF uploads when rendered in StrictMode', async () => {
+    let documents = [createDocument()];
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/en/api/documents') && method === 'GET') {
+        return createJsonResponse({ documents });
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await renderWorkspace({ useStrictMode: true });
+
+    queuePdfFiles([
+      new File(['first'], 'first.pdf', { type: 'application/pdf' }),
+      new File(['second'], 'second.pdf', { type: 'application/pdf' }),
+    ]);
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(1);
+    });
+
+    documents = [
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440051',
+        title: 'first',
+        status: 'ready',
+        originalFilename: 'first.pdf',
+        createdAt: '2026-03-07T13:00:00.000Z',
+        processedAt: '2026-03-07T13:01:00.000Z',
+      }),
+      ...documents,
+    ];
+    MockXMLHttpRequest.instances[0]!.respond(202, { documentId: '550e8400-e29b-41d4-a716-446655440051', status: 'uploading' });
+    await flushAsyncWork();
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(2);
+    });
+
+    documents = [
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440051',
+        title: 'first',
+        status: 'ready',
+        originalFilename: 'first.pdf',
+        createdAt: '2026-03-07T13:00:00.000Z',
+        processedAt: '2026-03-07T13:01:00.000Z',
+      }),
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440052',
+        title: 'second',
+        status: 'ready',
+        originalFilename: 'second.pdf',
+        createdAt: '2026-03-07T13:00:30.000Z',
+        processedAt: '2026-03-07T13:01:30.000Z',
+      }),
+      createDocument(),
+    ];
+    MockXMLHttpRequest.instances[1]!.respond(202, { documentId: '550e8400-e29b-41d4-a716-446655440052', status: 'uploading' });
+    await flushAsyncWork();
+
+    await vi.waitFor(() => {
+      expect(page.getByText(contentMessages.upload_status_completed).elements()).toHaveLength(2);
+    });
+  });
+
+  it('times out a stalled PDF upload and advances the queue', async () => {
+    let documents = [createDocument()];
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/en/api/documents') && method === 'GET') {
+        return createJsonResponse({ documents });
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await renderWorkspace();
+
+    queuePdfFiles([
+      new File(['first'], 'first.pdf', { type: 'application/pdf' }),
+      new File(['second'], 'second.pdf', { type: 'application/pdf' }),
+    ]);
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(1);
+    });
+
+    expect(MockXMLHttpRequest.instances[0]!.timeout).toBeGreaterThan(0);
+
+    MockXMLHttpRequest.instances[0]!.emitTimeout();
+    await flushAsyncWork();
+
+    await expect.element(page.getByText(contentMessages.upload_status_failed)).toBeInTheDocument();
+
+    await vi.waitFor(() => {
+      expect(MockXMLHttpRequest.instances).toHaveLength(2);
+    });
+
+    documents = [
+      createDocument({
+        id: '550e8400-e29b-41d4-a716-446655440061',
+        title: 'second',
+        status: 'ready',
+        originalFilename: 'second.pdf',
+        createdAt: '2026-03-07T14:00:00.000Z',
+        processedAt: '2026-03-07T14:01:00.000Z',
+      }),
+      ...documents,
+    ];
+    MockXMLHttpRequest.instances[1]!.respond(202, { documentId: '550e8400-e29b-41d4-a716-446655440061', status: 'uploading' });
+    await flushAsyncWork();
+
+    await expect.element(page.getByRole('button', { name: contentMessages.upload_dismiss }).first()).toBeInTheDocument();
+
+    await page.getByRole('button', { name: contentMessages.upload_dismiss }).first().click();
+
+    await expect.element(page.getByText('first.pdf')).not.toBeInTheDocument();
+    await expect.element(page.getByText(contentMessages.upload_status_completed)).toBeInTheDocument();
   });
 
   it('uses file size as a fallback when upload progress is not length-computable', async () => {

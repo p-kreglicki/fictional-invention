@@ -52,6 +52,8 @@ type XhrRequestHandle = {
   }>;
 };
 
+const PDF_UPLOAD_REQUEST_TIMEOUT_MS = 60_000;
+
 function getUploadErrorMessage(input: {
   payload: { error?: string; message?: string };
   t: WorkspaceTranslations;
@@ -122,6 +124,7 @@ function createPdfUploadRequest(input: {
   }>((resolve, reject) => {
     xhr.open('POST', `${input.apiBasePath}/documents/upload`);
     xhr.responseType = 'text';
+    xhr.timeout = PDF_UPLOAD_REQUEST_TIMEOUT_MS;
 
     xhr.upload.addEventListener('progress', (event) => {
       input.onProgress(getProgressPercentage({
@@ -145,6 +148,10 @@ function createPdfUploadRequest(input: {
 
     xhr.addEventListener('abort', () => {
       reject(new Error('upload_aborted'));
+    });
+
+    xhr.addEventListener('timeout', () => {
+      reject(new Error('upload_error'));
     });
 
     xhr.send(formData);
@@ -197,6 +204,8 @@ export function useDocumentsWorkspace(props: UseDocumentsWorkspaceOptions = {}) 
   }, [pdfUploadItems]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
       isMountedRef.current = false;
       currentPdfUploadRef.current?.abort();
