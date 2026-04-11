@@ -4,7 +4,7 @@
 import type { FileIcon } from '@untitledui/file-icons';
 import type { ComponentProps, ComponentPropsWithRef } from 'react';
 import { FileIcon as FileTypeIcon } from '@untitledui/file-icons';
-import { CheckCircle, Trash01, UploadCloud02, XCircle } from '@untitledui/icons';
+import { CheckCircle, Hourglass03, Trash01, UploadCloud02, XCircle } from '@untitledui/icons';
 import { AnimatePresence, motion } from 'motion/react';
 import { useId, useRef, useState } from 'react';
 import { Button } from '@/components/untitled/base/buttons/button';
@@ -260,6 +260,14 @@ export type FileListItemProps = {
   progress: number;
   /** Whether the file failed to upload. */
   failed?: boolean;
+  /** Whether the file completed successfully. */
+  complete?: boolean;
+  /** Optional status label shown next to the icon. */
+  statusLabel?: string;
+  /** Which status icon to render. */
+  statusIcon?: 'complete' | 'failed' | 'processing' | 'uploading';
+  /** Whether to hide the progress bar. */
+  hideProgress?: boolean;
   /** The type of the file. */
   type?: ComponentProps<typeof FileIcon>['type'];
   /** The class name of the file list item. */
@@ -268,12 +276,89 @@ export type FileListItemProps = {
   fileIconVariant?: ComponentProps<typeof FileTypeIcon>['variant'];
   /** The function to call when the file is deleted. */
   onDelete?: () => void;
+  /** The tooltip for the delete button. */
+  deleteLabel?: string;
   /** The function to call when the file upload is retried. */
   onRetry?: () => void;
+  /** The label for the retry action. */
+  retryLabel?: string;
 };
 
-export const FileListItemProgressBar = ({ name, size, progress, failed, type, fileIconVariant, onDelete, onRetry, className }: FileListItemProps) => {
-  const isComplete = progress === 100;
+function renderStatusIcon(statusIcon: NonNullable<FileListItemProps['statusIcon']>) {
+  if (statusIcon === 'complete') {
+    return <CheckCircle className="size-4 stroke-[2.5px] text-success-600" />;
+  }
+
+  if (statusIcon === 'failed') {
+    return <XCircle className="size-4 text-fg-error-primary" />;
+  }
+
+  if (statusIcon === 'processing') {
+    return <Hourglass03 className="size-4 stroke-[2.5px] text-warning-600" />;
+  }
+
+  return <UploadCloud02 className="size-4 stroke-[2.5px] text-fg-quaternary" />;
+}
+
+function getStatusToneClasses(statusIcon: NonNullable<FileListItemProps['statusIcon']>) {
+  if (statusIcon === 'complete') {
+    return 'text-success-600';
+  }
+
+  if (statusIcon === 'failed') {
+    return 'text-error-primary';
+  }
+
+  if (statusIcon === 'processing') {
+    return 'text-warning-700';
+  }
+
+  return 'text-quaternary';
+}
+
+function getProgressFillClasses(statusIcon: NonNullable<FileListItemProps['statusIcon']>) {
+  if (statusIcon === 'complete') {
+    return 'bg-success-600';
+  }
+
+  if (statusIcon === 'failed') {
+    return 'bg-error-600';
+  }
+
+  if (statusIcon === 'processing') {
+    return 'bg-warning-500';
+  }
+
+  return undefined;
+}
+
+export const FileListItemProgressBar = ({
+  name,
+  size,
+  progress,
+  failed,
+  complete,
+  statusLabel,
+  statusIcon,
+  hideProgress,
+  type,
+  fileIconVariant,
+  onDelete,
+  deleteLabel,
+  onRetry,
+  retryLabel,
+  className,
+}: FileListItemProps) => {
+  const isComplete = complete ?? progress === 100;
+  const resolvedStatusIcon = statusIcon ?? (failed ? 'failed' : isComplete ? 'complete' : 'uploading');
+  const resolvedStatusLabel = statusLabel
+    ?? (resolvedStatusIcon === 'complete'
+      ? 'Complete'
+      : resolvedStatusIcon === 'failed'
+        ? 'Failed'
+        : 'Uploading...');
+  const shouldShowProgress = hideProgress !== undefined ? !hideProgress : !failed;
+  const progressClassName = getProgressFillClasses(resolvedStatusIcon);
 
   return (
     <motion.li
@@ -298,30 +383,33 @@ export const FileListItemProgressBar = ({ name, size, progress, failed, type, fi
               <hr className="h-3 w-px rounded-t-full rounded-b-full border-none bg-border-primary" />
 
               <div className="flex items-center gap-1">
-                {isComplete && <CheckCircle className="text-fg-success-primary size-4 stroke-[2.5px]" />}
-                {isComplete && <p className="text-success-primary text-sm font-medium">Complete</p>}
-
-                {!isComplete && !failed && <UploadCloud02 className="stroke-[2.5px size-4 text-fg-quaternary" />}
-                {!isComplete && !failed && <p className="text-sm font-medium text-quaternary">Uploading...</p>}
-
-                {failed && <XCircle className="size-4 text-fg-error-primary" />}
-                {failed && <p className="text-sm font-medium text-error-primary">Failed</p>}
+                {renderStatusIcon(resolvedStatusIcon)}
+                <p className={cx('text-sm font-medium', getStatusToneClasses(resolvedStatusIcon))}>{resolvedStatusLabel}</p>
               </div>
             </div>
           </div>
 
-          <ButtonUtility color="tertiary" tooltip="Delete" icon={Trash01} size="xs" className="-mt-2 -mr-2 self-start" onClick={onDelete} />
+          {onDelete && (
+            <ButtonUtility
+              color="tertiary"
+              tooltip={deleteLabel ?? 'Delete'}
+              icon={Trash01}
+              size="xs"
+              className="-mt-2 -mr-2 self-start"
+              onClick={onDelete}
+            />
+          )}
         </div>
 
-        {!failed && (
+        {shouldShowProgress && (
           <div className="mt-1 w-full">
-            <ProgressBar labelPosition="right" max={100} min={0} value={progress} />
+            <ProgressBar labelPosition="right" max={100} min={0} progressClassName={progressClassName} value={progress} />
           </div>
         )}
 
         {failed && (
           <Button color="link-destructive" size="sm" onClick={onRetry} className="mt-1.5">
-            Try again
+            {retryLabel ?? 'Try again'}
           </Button>
         )}
       </div>
@@ -329,8 +417,32 @@ export const FileListItemProgressBar = ({ name, size, progress, failed, type, fi
   );
 };
 
-export const FileListItemProgressFill = ({ name, size, progress, failed, type, fileIconVariant, onDelete, onRetry, className }: FileListItemProps) => {
-  const isComplete = progress === 100;
+export const FileListItemProgressFill = ({
+  name,
+  size,
+  progress,
+  failed,
+  complete,
+  statusLabel,
+  statusIcon,
+  hideProgress,
+  type,
+  fileIconVariant,
+  onDelete,
+  deleteLabel,
+  onRetry,
+  retryLabel,
+  className,
+}: FileListItemProps) => {
+  const isComplete = complete ?? progress === 100;
+  const resolvedStatusIcon = statusIcon ?? (failed ? 'failed' : isComplete ? 'complete' : 'uploading');
+  const resolvedStatusLabel = statusLabel
+    ?? (resolvedStatusIcon === 'complete'
+      ? 'Complete'
+      : resolvedStatusIcon === 'failed'
+        ? 'Failed'
+        : 'Uploading...');
+  const shouldShowProgress = hideProgress !== undefined ? !hideProgress : !failed;
 
   return (
     <motion.li layout="position" className={cx('relative flex gap-3 overflow-hidden rounded-xl bg-primary p-4', className)}>
@@ -359,19 +471,14 @@ export const FileListItemProgressFill = ({ name, size, progress, failed, type, f
             <p className="truncate text-sm font-medium text-secondary">{name}</p>
 
             <div className="mt-0.5 flex items-center gap-2">
-              <p className="text-sm text-tertiary">{failed ? 'Upload failed, please try again' : getReadableFileSize(size)}</p>
+              <p className="text-sm text-tertiary">{failed ? resolvedStatusLabel : getReadableFileSize(size)}</p>
 
-              {!failed && (
+              {shouldShowProgress && (
                 <>
                   <hr className="h-3 w-px rounded-t-full rounded-b-full border-none bg-border-primary" />
                   <div className="flex items-center gap-1">
-                    {isComplete && <CheckCircle className="text-fg-success-primary size-4 stroke-[2.5px]" />}
-                    {!isComplete && <UploadCloud02 className="size-4 stroke-[2.5px] text-fg-quaternary" />}
-
-                    <p className="text-sm text-tertiary">
-                      {progress}
-                      %
-                    </p>
+                    {renderStatusIcon(resolvedStatusIcon)}
+                    <p className={cx('text-sm', getStatusToneClasses(resolvedStatusIcon))}>{resolvedStatusLabel}</p>
                   </div>
                 </>
               )}
@@ -380,12 +487,21 @@ export const FileListItemProgressFill = ({ name, size, progress, failed, type, f
 
           {failed && (
             <Button color="link-destructive" size="sm" onClick={onRetry} className="mt-1.5">
-              Try again
+              {retryLabel ?? 'Try again'}
             </Button>
           )}
         </div>
 
-        <ButtonUtility color="tertiary" tooltip="Delete" icon={Trash01} size="xs" className="-mt-2 -mr-2 self-start" onClick={onDelete} />
+        {onDelete && (
+          <ButtonUtility
+            color="tertiary"
+            tooltip={deleteLabel ?? 'Delete'}
+            icon={Trash01}
+            size="xs"
+            className="-mt-2 -mr-2 self-start"
+            onClick={onDelete}
+          />
+        )}
       </div>
     </motion.li>
   );

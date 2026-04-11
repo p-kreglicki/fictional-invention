@@ -52,11 +52,17 @@ describe('DocumentsLibrary', () => {
       </NextIntlClientProvider>,
     );
 
+    await expect.element(page.getByRole('columnheader', { name: 'File Name' })).toBeInTheDocument();
+    await expect.element(page.getByRole('columnheader', { name: 'File Type' })).toBeInTheDocument();
+    await expect.element(page.getByRole('columnheader', { name: 'File Status' })).toBeInTheDocument();
+    await expect.element(page.getByRole('columnheader', { name: 'Processed Date' })).toBeInTheDocument();
+    await expect.element(page.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
     await expect.element(page.getByText('Lesson notes')).toBeInTheDocument();
     await expect.element(page.getByText('Ready')).toBeInTheDocument();
     await expect.element(page.getByText('Broken URL import')).toBeInTheDocument();
     await expect.element(page.getByText('Failed', { exact: true })).toBeInTheDocument();
     await expect.element(page.getByText('Failed to extract URL content.')).toBeInTheDocument();
+    await expect.element(page.getByText('Not processed yet')).toBeInTheDocument();
   });
 
   it('shows only the five most recent documents in compact mode', async () => {

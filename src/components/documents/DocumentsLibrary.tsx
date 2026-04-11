@@ -1,9 +1,10 @@
 'use client';
 
 import type { DocumentListItem } from '@/validations/DocumentValidation';
-import { CheckCircle, FileSearch03, Globe01, Upload01 } from '@untitledui/icons';
+import { FileSearch03 } from '@untitledui/icons';
 import { useTranslations } from 'next-intl';
 import { badgeStyles, buttonStyles, panelStyles, statusBadgeStyles } from '@/components/ui/styles';
+import { Table } from '@/components/untitled/application/table/table';
 
 type DocumentsLibraryProps = {
   documents: DocumentListItem[];
@@ -21,6 +22,14 @@ function isSafeUrl(url: string) {
   } catch {
     return false;
   }
+}
+
+function formatDocumentProcessedDate(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return new Date(value).toLocaleString();
 }
 
 export function DocumentsLibrary(props: DocumentsLibraryProps) {
@@ -68,11 +77,11 @@ export function DocumentsLibrary(props: DocumentsLibraryProps) {
         )}
       </div>
 
-      <ul className="mt-5 space-y-3">
-        {visibleDocuments.map(document => (
-          <li key={document.id} className="rounded-[1.5rem] border border-white/85 bg-ink-50/90 p-4 shadow-xs">
-            {isCompact
-              ? (
+      {isCompact
+        ? (
+            <ul className="mt-5 space-y-3">
+              {visibleDocuments.map(document => (
+                <li key={document.id} className="rounded-[1.5rem] border border-white/85 bg-ink-50/90 p-4 shadow-xs">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -107,48 +116,31 @@ export function DocumentsLibrary(props: DocumentsLibraryProps) {
                       {t('delete_button')}
                     </button>
                   </div>
-                )
-              : (
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold text-ink-950">{document.title}</h3>
-                        <span className={statusBadgeStyles(document.status)}>
-                          {t(`status_${document.status}`)}
-                        </span>
-                        <span className={badgeStyles({ tone: 'neutral' })}>
-                          {t(`type_${document.contentType}`)}
-                        </span>
-                      </div>
-
-                      <dl className="mt-4 grid gap-3 text-sm text-ink-600 md:grid-cols-2">
-                        {document.processedAt && (
-                          <div className="rounded-2xl bg-white/85 p-3">
-                            <dt className="inline-flex items-center gap-2 font-medium text-ink-900">
-                              <CheckCircle className="h-4 w-4 text-success-500" />
-                              {t('processed_at_label')}
-                              :
-                            </dt>
-                            <dd className="mt-1">{new Date(document.processedAt).toLocaleString()}</dd>
-                          </div>
-                        )}
-                        {document.originalFilename && (
-                          <div className="rounded-2xl bg-white/85 p-3">
-                            <dt className="inline-flex items-center gap-2 font-medium text-ink-900">
-                              <Upload01 className="h-4 w-4 text-brand-600" />
-                              {t('filename_label')}
-                              :
-                            </dt>
-                            <dd className="mt-1 break-all">{document.originalFilename}</dd>
-                          </div>
-                        )}
-                        {document.sourceUrl && (
-                          <div className="rounded-2xl bg-white/85 p-3 md:col-span-2">
-                            <dt className="inline-flex items-center gap-2 font-medium text-ink-900">
-                              <Globe01 className="h-4 w-4 text-brand-600" />
-                              {t('source_url_label')}
-                            </dt>
-                            <dd className="mt-1 break-all">
+                </li>
+              ))}
+            </ul>
+          )
+        : (
+            <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-ink-100 bg-white shadow-xs">
+              <Table aria-label={title}>
+                <Table.Header>
+                  <Table.Head isRowHeader>{t('table_header_file_name')}</Table.Head>
+                  <Table.Head>{t('table_header_file_type')}</Table.Head>
+                  <Table.Head>{t('table_header_file_status')}</Table.Head>
+                  <Table.Head>{t('table_header_processed_date')}</Table.Head>
+                  <Table.Head className="text-right">{t('table_header_actions')}</Table.Head>
+                </Table.Header>
+                <Table.Body>
+                  {visibleDocuments.map(document => (
+                    <Table.Row key={document.id}>
+                      <Table.Cell>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-ink-950">{document.title}</p>
+                          {document.originalFilename && (
+                            <p className="mt-1 text-xs break-all text-ink-500">{document.originalFilename}</p>
+                          )}
+                          {!document.originalFilename && document.sourceUrl && (
+                            <p className="mt-1 text-xs break-all text-ink-500">
                               {isSafeUrl(document.sourceUrl)
                                 ? (
                                     <a className="text-brand-700 hover:text-brand-800" href={document.sourceUrl} rel="noreferrer" target="_blank">
@@ -156,32 +148,43 @@ export function DocumentsLibrary(props: DocumentsLibraryProps) {
                                     </a>
                                   )
                                 : document.sourceUrl}
-                            </dd>
-                          </div>
-                        )}
-                      </dl>
-
-                      {document.errorMessage && (
-                        <p className="mt-3 rounded-2xl border border-error-100 bg-error-50 px-3 py-2 text-sm text-error-700">
-                          {document.errorMessage}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        className={buttonStyles({ size: 'sm' })}
-                        onClick={() => props.onDelete(document)}
-                        type="button"
-                      >
-                        {t('delete_button')}
-                      </button>
-                    </div>
-                  </div>
-                )}
-          </li>
-        ))}
-      </ul>
+                            </p>
+                          )}
+                          {document.errorMessage && (
+                            <p className="mt-2 text-xs text-error-700">{document.errorMessage}</p>
+                          )}
+                        </div>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <span className={badgeStyles({ tone: 'neutral' })}>
+                          {t(`type_${document.contentType}`)}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <span className={statusBadgeStyles(document.status)}>
+                          {t(`status_${document.status}`)}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <span className={document.processedAt ? 'text-ink-600' : 'text-ink-400'}>
+                          {formatDocumentProcessedDate(document.processedAt) ?? t('table_processed_date_pending')}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell className="text-right">
+                        <button
+                          className={buttonStyles({ size: 'sm' })}
+                          onClick={() => props.onDelete(document)}
+                          type="button"
+                        >
+                          {t('delete_button')}
+                        </button>
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>
+              </Table>
+            </div>
+          )}
     </section>
   );
 }

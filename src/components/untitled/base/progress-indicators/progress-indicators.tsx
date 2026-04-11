@@ -50,12 +50,12 @@ export const ProgressBarBase = ({ value, min = 0, max = 100, className, progress
       aria-valuenow={value}
       aria-valuemin={min}
       aria-valuemax={max}
-      className={cx('h-2 w-full overflow-hidden rounded-md bg-quaternary', className)}
+      className={cx('h-2 w-full overflow-hidden rounded-md bg-secondary', className)}
     >
       <div
         // Use transform instead of width to avoid layout thrashing (and for smoother animation)
         style={{ transform: `translateX(-${100 - percentage}%)` }}
-        className={cx('size-full rounded-md bg-fg-brand-primary transition duration-75 ease-linear', progressClassName)}
+        className={cx('size-full rounded-md bg-brand-600 transition duration-75 ease-linear', progressClassName)}
       />
     </div>
   );
