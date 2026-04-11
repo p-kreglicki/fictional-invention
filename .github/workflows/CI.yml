@@ -80,6 +80,9 @@ jobs:
       - name: Type checking
         run: npm run check:types
 
+      - name: Forbidden dependency guard
+        run: npm run check:forbidden-deps
+
       - name: Check dependencies
         run: npm run check:deps
 
