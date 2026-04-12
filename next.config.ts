@@ -6,6 +6,10 @@ import './src/libs/Env';
 
 // Define the base Next.js configuration
 const baseConfig: NextConfig = {
+  allowedDevOrigins: [
+    '*.ngrok-free.dev',
+    '*.ngrok.app',
+  ],
   devIndicators: {
     position: 'bottom-right',
   },

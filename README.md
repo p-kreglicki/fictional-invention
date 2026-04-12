@@ -69,6 +69,11 @@ ARCJET_KEY=your_arcjet_site_key
 # Database (production)
 DATABASE_URL=your_postgres_connection_string
 
+# Optional local database for development
+# true = use the bundled PGlite database in ./local.db
+# false = use DATABASE_URL directly
+USE_PGLITE=true
+
 # Background generation dispatch (production)
 CRON_SECRET=your_shared_cron_secret
 
@@ -98,7 +103,11 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-The project uses PGlite for local development, so no database setup is required.
+When `USE_PGLITE=true`, `npm run dev` starts a local Postgres-compatible server backed by
+[`local.db`](./local.db), so no external database setup is required.
+
+When you need to inspect real application data instead, set `USE_PGLITE=false` and provide the
+correct `DATABASE_URL` in `.env.local` before starting the dev server.
 
 ### Database Migrations
 
