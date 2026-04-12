@@ -136,9 +136,6 @@ export function DocumentsLibrary(props: DocumentsLibraryProps) {
                       <Table.Cell>
                         <div className="min-w-0">
                           <p className="font-semibold text-ink-950">{document.title}</p>
-                          {document.originalFilename && (
-                            <p className="mt-1 text-xs break-all text-ink-500">{document.originalFilename}</p>
-                          )}
                           {!document.originalFilename && document.sourceUrl && (
                             <p className="mt-1 text-xs break-all text-ink-500">
                               {isSafeUrl(document.sourceUrl)

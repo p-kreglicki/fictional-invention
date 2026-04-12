@@ -5,8 +5,10 @@ import type {
   ExerciseLatestResponse,
   SubmitResponseSuccess,
 } from '@/validations/ResponseValidation';
+import { CheckCircle } from '@untitledui/icons';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
+import { Badge } from '@/components/ui/base/badges/badges';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { RadioButton, RadioGroup } from '@/components/ui/Radio';
@@ -159,59 +161,14 @@ function getAnswerPayload(input: {
   return answer;
 }
 
-function renderRubric(props: {
-  response: ExerciseLatestResponse;
-  labels: {
-    accuracy: string;
-    grammar: string;
-    fluency: string;
-    bonus: string;
-  };
-}) {
-  return (
-    <dl className="grid grid-cols-2 gap-2 text-xs text-ink-600 sm:grid-cols-4">
-      <div className="rounded-2xl bg-white/85 p-3">
-        <dt>{props.labels.accuracy}</dt>
-        <dd className="mt-1 font-semibold text-ink-900">
-          {props.response.rubric.accuracy}
-          /40
-        </dd>
-      </div>
-      <div className="rounded-2xl bg-white/85 p-3">
-        <dt>{props.labels.grammar}</dt>
-        <dd className="mt-1 font-semibold text-ink-900">
-          {props.response.rubric.grammar}
-          /30
-        </dd>
-      </div>
-      <div className="rounded-2xl bg-white/85 p-3">
-        <dt>{props.labels.fluency}</dt>
-        <dd className="mt-1 font-semibold text-ink-900">
-          {props.response.rubric.fluency}
-          /20
-        </dd>
-      </div>
-      <div className="rounded-2xl bg-white/85 p-3">
-        <dt>{props.labels.bonus}</dt>
-        <dd className="mt-1 font-semibold text-ink-900">
-          {props.response.rubric.bonus}
-          /10
-        </dd>
-      </div>
-    </dl>
-  );
+function hasCorrectLatestResponse(exercise: ExerciseCardItem) {
+  return exercise.latestResponse?.score === 100;
 }
 
 export { type ExerciseCardItem };
 
 export function ExerciseCards(props: ExerciseCardsProps) {
   const t = useTranslations('DashboardExercisesPage');
-  const rubricLabels = {
-    accuracy: t('rubric_accuracy'),
-    grammar: t('rubric_grammar'),
-    fluency: t('rubric_fluency'),
-    bonus: t('rubric_bonus'),
-  };
   const [answersByExerciseId, setAnswersByExerciseId] = useState<Record<string, string>>({});
   const [submissionStateByExerciseId, setSubmissionStateByExerciseId] = useState<Record<string, SubmissionState>>({});
   const isMountedRef = useRef(true);
@@ -261,7 +218,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
 
   async function handleSubmit(exercise: ExerciseCardItem) {
     const currentState = submissionStateByExerciseId[exercise.id];
-    if (currentState?.isSubmitting) {
+    if (currentState?.isSubmitting || hasCorrectLatestResponse(exercise)) {
       return;
     }
 
@@ -389,6 +346,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
       <div className="grid gap-4 md:grid-cols-2">
         {props.exercises.map((exercise) => {
           const submissionState = submissionStateByExerciseId[exercise.id];
+          const isSolved = hasCorrectLatestResponse(exercise);
           const exerciseTypeLabel = exercise.type === 'multiple_choice'
             ? null
             : getExerciseTypeLabel({ exercise, t });
@@ -413,7 +371,17 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                 </div>
               )}
 
-              <h3 className="mt-3 text-base font-semibold text-ink-900">{exercise.question}</h3>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <h3 className="text-base font-semibold text-ink-900">{exercise.question}</h3>
+                {isSolved && (
+                  <Badge color="success" size="md" type="pill-color">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle className="size-3.5" />
+                      <span>{t('correct_answer_badge')}</span>
+                    </span>
+                  </Badge>
+                )}
+              </div>
 
               {exercise.grammarFocus && (
                 <p className="mt-2 text-xs text-ink-600">
@@ -521,7 +489,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
 
               <div className="mt-4 flex items-center gap-3">
                 <Button
-                  disabled={submissionState?.isSubmitting}
+                  disabled={submissionState?.isSubmitting || isSolved}
                   onClick={() => {
                     void handleSubmit(exercise);
                   }}
@@ -537,44 +505,6 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                   <p className="rounded-2xl border border-error-100 bg-error-50 px-3 py-2 text-sm text-error-700">{submissionState.errorMessage}</p>
                 )}
               </div>
-
-              {exercise.latestResponse && (
-                <section className="mt-4 rounded-[1.5rem] border border-brand-100 bg-brand-25 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-sm font-semibold text-ink-900">{t('latest_response_label')}</h4>
-                    <p className="text-sm font-semibold text-ink-900">
-                      {t('score_label')}
-                      :
-                      {' '}
-                      {exercise.latestResponse.score}
-                      /100
-                    </p>
-                  </div>
-
-                  <div className="mt-3">
-                    {renderRubric({
-                      response: exercise.latestResponse,
-                      labels: rubricLabels,
-                    })}
-                  </div>
-
-                  <p className="mt-3 text-sm text-ink-700">
-                    <span className="font-medium text-ink-900">{t('feedback_label')}</span>
-                    :
-                    {' '}
-                    {exercise.latestResponse.overallFeedback}
-                  </p>
-
-                  {exercise.latestResponse.suggestedReview.length > 0 && (
-                    <p className="mt-2 text-sm text-ink-700">
-                      <span className="font-medium text-ink-900">{t('suggested_review_label')}</span>
-                      :
-                      {' '}
-                      {exercise.latestResponse.suggestedReview.join(', ')}
-                    </p>
-                  )}
-                </section>
-              )}
             </article>
           );
         })}
