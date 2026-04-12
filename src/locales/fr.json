@@ -130,6 +130,7 @@
     "submit_answer_button": "Envoyer la réponse",
     "submit_answer_loading": "Évaluation...",
     "correct_answer_badge": "Correct !",
+    "incorrect_answer_badge": "Incorrect !",
     "submission_validation_error": "Saisissez une réponse avant l'envoi.",
     "submission_failed": "Impossible d'envoyer la réponse.",
     "latest_response_label": "Dernier retour",

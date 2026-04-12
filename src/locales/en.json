@@ -130,6 +130,7 @@
     "submit_answer_button": "Submit answer",
     "submit_answer_loading": "Checking...",
     "correct_answer_badge": "Correct!",
+    "incorrect_answer_badge": "Incorrect!",
     "submission_validation_error": "Enter an answer before submitting.",
     "submission_failed": "Unable to submit answer.",
     "latest_response_label": "Latest feedback",
