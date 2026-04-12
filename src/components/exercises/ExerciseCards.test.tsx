@@ -140,7 +140,7 @@ describe('ExerciseCards', () => {
   });
 
   it('keeps the submit button locked while a request is in flight', async () => {
-    let resolveFetch: ((value: Response | PromiseLike<Response>) => void) | undefined;
+    let resolveFetch: ((_: Response | PromiseLike<Response>) => void) | undefined;
     vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
       return new Promise((_resolve) => {
         resolveFetch = _resolve;
