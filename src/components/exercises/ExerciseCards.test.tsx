@@ -106,7 +106,7 @@ describe('ExerciseCards', () => {
 
     await render(<ExerciseCardsHarness exercise={createExercise()} />);
 
-    await expect.element(page.getByText(exerciseMessages.choose_correct_answer_label)).toBeInTheDocument();
+    await expect.element(page.getByRole('radiogroup', { name: exerciseMessages.choose_correct_answer_label })).toBeInTheDocument();
     await expect.element(page.getByText('Single choice')).not.toBeInTheDocument();
 
     await page.getByText('Io ho visto', { exact: true }).click();

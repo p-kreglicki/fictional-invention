@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRequireUser = vi.fn(async () => ({ id: 'user-1' }));
+const mockDeleteGenerationSet = vi.fn();
 const mockGetGenerationJobWithExercises = vi.fn();
 
 vi.mock('@/libs/Auth', () => ({
@@ -8,6 +9,7 @@ vi.mock('@/libs/Auth', () => ({
 }));
 
 vi.mock('@/libs/ExerciseGeneration', () => ({
+  deleteGenerationSet: mockDeleteGenerationSet,
   getGenerationJobWithExercises: mockGetGenerationJobWithExercises,
 }));
 
@@ -50,7 +52,7 @@ describe('GET /api/exercises/jobs/[id]', () => {
     expect(mockGetGenerationJobWithExercises).not.toHaveBeenCalled();
   });
 
-  it('returns job status and exercises', async () => {
+  it('returns grouped job payload with source documents and exercises', async () => {
     mockGetGenerationJobWithExercises.mockResolvedValue({
       job: {
         id: '550e8400-e29b-41d4-a716-446655440002',
@@ -59,6 +61,11 @@ describe('GET /api/exercises/jobs/[id]', () => {
         generatedCount: 2,
         failedCount: 0,
         errorMessage: null,
+        exerciseType: 'multiple_choice',
+        documentIds: ['550e8400-e29b-41d4-a716-446655440100'],
+        difficulty: 'beginner',
+        topicFocus: 'imperfetto',
+        exerciseIds: ['550e8400-e29b-41d4-a716-446655440010'],
         createdAt: new Date('2026-03-05T10:00:00.000Z'),
         startedAt: new Date('2026-03-05T10:00:02.000Z'),
         completedAt: new Date('2026-03-05T10:00:10.000Z'),
@@ -77,6 +84,11 @@ describe('GET /api/exercises/jobs/[id]', () => {
         averageScore: null,
         createdAt: new Date('2026-03-05T10:00:10.000Z'),
       }],
+      sourceDocuments: [{
+        id: '550e8400-e29b-41d4-a716-446655440100',
+        title: 'Lesson notes',
+      }],
+      latestResponsesByExerciseId: new Map(),
     });
 
     const { GET } = await import('./route');
@@ -87,7 +99,11 @@ describe('GET /api/exercises/jobs/[id]', () => {
 
     expect(response.status).toBe(200);
     expect(body.id).toBe('550e8400-e29b-41d4-a716-446655440002');
-    expect(body.status).toBe('completed');
+    expect(body.exerciseType).toBe('multiple_choice');
+    expect(body.sourceDocuments).toEqual([{
+      id: '550e8400-e29b-41d4-a716-446655440100',
+      title: 'Lesson notes',
+    }]);
     expect(body.exercises).toHaveLength(1);
     expect(body.exercises[0].renderData.options).toEqual(['a', 'b', 'c', 'd']);
     expect(body.exercises[0].renderData.correctIndex).toBeUndefined();
@@ -102,6 +118,14 @@ describe('GET /api/exercises/jobs/[id]', () => {
         generatedCount: 2,
         failedCount: 0,
         errorMessage: null,
+        exerciseType: 'multiple_choice',
+        documentIds: [],
+        difficulty: 'beginner',
+        topicFocus: null,
+        exerciseIds: [
+          '550e8400-e29b-41d4-a716-446655440010',
+          '550e8400-e29b-41d4-a716-446655440011',
+        ],
         createdAt: new Date('2026-03-05T10:00:00.000Z'),
         startedAt: new Date('2026-03-05T10:00:02.000Z'),
         completedAt: new Date('2026-03-05T10:00:10.000Z'),
@@ -136,6 +160,8 @@ describe('GET /api/exercises/jobs/[id]', () => {
           createdAt: new Date('2026-03-05T10:00:11.000Z'),
         },
       ],
+      sourceDocuments: [],
+      latestResponsesByExerciseId: new Map(),
     });
 
     const { GET } = await import('./route');
@@ -147,5 +173,47 @@ describe('GET /api/exercises/jobs/[id]', () => {
     expect(response.status).toBe(200);
     expect(body.exercises).toHaveLength(1);
     expect(body.exercises[0].id).toBe('550e8400-e29b-41d4-a716-446655440011');
+  });
+});
+
+describe('DELETE /api/exercises/jobs/[id]', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns 200 when a set is deleted', async () => {
+    mockDeleteGenerationSet.mockResolvedValue({
+      success: true,
+    });
+
+    const { DELETE } = await import('./route');
+    const response = await DELETE(new Request('http://localhost', { method: 'DELETE' }), {
+      params: Promise.resolve({ id: '550e8400-e29b-41d4-a716-446655440002' }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(mockDeleteGenerationSet).toHaveBeenCalledWith({
+      jobId: '550e8400-e29b-41d4-a716-446655440002',
+      userId: 'user-1',
+    });
+  });
+
+  it('returns 409 when the set is still active', async () => {
+    mockDeleteGenerationSet.mockResolvedValue({
+      success: false,
+      errorCode: 'JOB_NOT_DELETABLE',
+      error: 'Active generation sets cannot be deleted',
+    });
+
+    const { DELETE } = await import('./route');
+    const response = await DELETE(new Request('http://localhost', { method: 'DELETE' }), {
+      params: Promise.resolve({ id: '550e8400-e29b-41d4-a716-446655440002' }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).toBe('JOB_NOT_DELETABLE');
   });
 });

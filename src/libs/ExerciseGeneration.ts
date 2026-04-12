@@ -28,6 +28,7 @@ const PENDING_STALE_JOB_THRESHOLD_MS = Env.GENERATION_PENDING_STALE_MS ?? 10 * 6
 const PROCESSING_STALE_JOB_THRESHOLD_MS = Env.GENERATION_PROCESSING_STALE_MS ?? 20 * 60 * 1000;
 const CHAT_REQUEST_DELAY_MS = Env.MISTRAL_CHAT_REQUEST_DELAY_MS ?? 0;
 const LOG_PAYLOAD_EXCERPT_LENGTH = 400;
+const MULTIPLE_WHITESPACE_REGEX = /\s+/g;
 
 type GenerationCandidate = {
   documentId: string;
@@ -66,6 +67,59 @@ type ClaimedGenerationJob = {
   requestedCount: number;
   difficulty: 'beginner' | 'intermediate' | 'advanced' | null;
   topicFocus: string | null;
+};
+
+type GenerationJobWithMetadata = {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  requestedCount: number;
+  generatedCount: number;
+  failedCount: number;
+  errorMessage: string | null;
+  exerciseType: 'multiple_choice' | 'fill_gap' | 'single_answer';
+  documentIds: string[];
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | null;
+  topicFocus: string | null;
+  exerciseIds: string[];
+  createdAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+};
+
+type StoredExerciseRow = {
+  id: string;
+  type: 'multiple_choice' | 'fill_gap' | 'single_answer';
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | null;
+  question: string;
+  exerciseData: unknown;
+  grammarFocus: string | null;
+  timesAttempted: number | null;
+  averageScore: number | null;
+  createdAt: Date;
+};
+
+type LatestResponseRow = {
+  id: string;
+  exerciseId: string;
+  score: number;
+  evaluationMethod: 'deterministic' | 'llm';
+  rubric: unknown;
+  overallFeedback: string;
+  suggestedReview: string[] | null;
+  responseTimeMs: number | null;
+  createdAt: Date;
+};
+
+type GenerationSetSourceDocument = {
+  id: string;
+  title: string;
+};
+
+type GenerationSetRecord = {
+  job: GenerationJobWithMetadata;
+  exercises: StoredExerciseRow[];
+  sourceDocuments: GenerationSetSourceDocument[];
+  latestResponsesByExerciseId: Map<string, LatestResponseRow>;
 };
 
 type GenerationWorkerBatchResult = {
@@ -151,7 +205,7 @@ function buildCandidateSubsetKey(candidates: GenerationCandidate[]) {
 function normalizeGeneratedQuestion(question: string) {
   return question
     .normalize('NFC')
-    .replace(/\s+/g, ' ')
+    .replace(MULTIPLE_WHITESPACE_REGEX, ' ')
     .trim()
     .toLocaleLowerCase('it-IT');
 }
@@ -992,41 +1046,35 @@ export async function getGenerationJobWithExercises(jobId: string, userId: strin
     return null;
   }
 
-  const exercises = job.exerciseIds.length > 0
-    ? await db
-        .select({
-          id: exercisesSchema.id,
-          type: exercisesSchema.type,
-          difficulty: exercisesSchema.difficulty,
-          question: exercisesSchema.question,
-          exerciseData: exercisesSchema.exerciseData,
-          grammarFocus: exercisesSchema.grammarFocus,
-          timesAttempted: exercisesSchema.timesAttempted,
-          averageScore: exercisesSchema.averageScore,
-          createdAt: exercisesSchema.createdAt,
-        })
-        .from(exercisesSchema)
-        .where(and(
-          eq(exercisesSchema.userId, userId),
-          inArray(exercisesSchema.id, job.exerciseIds),
-        ))
-        .orderBy(desc(exercisesSchema.createdAt))
-    : [];
+  const [exercises, latestResponsesByExerciseId, sourceDocuments] = await Promise.all([
+    listStoredExercisesByIds({
+      userId,
+      exerciseIds: job.exerciseIds,
+    }),
+    listLatestResponsesForExercises(userId, job.exerciseIds),
+    listSourceDocumentsByIds({
+      userId,
+      documentIds: job.documentIds,
+    }),
+  ]);
 
   return {
     job,
     exercises,
+    latestResponsesByExerciseId,
+    sourceDocuments,
   };
 }
 
-/**
- * Lists recently generated exercises for a user.
- * @param userId - Authenticated user ID.
- * @param limit - Max number of exercises.
- * @returns Exercise rows sorted by newest first.
- */
-export async function listRecentExercises(userId: string, limit = 50) {
-  return db
+async function listStoredExercisesByIds(input: {
+  userId: string;
+  exerciseIds: string[];
+}) {
+  if (input.exerciseIds.length === 0) {
+    return [] as StoredExerciseRow[];
+  }
+
+  const exerciseRows = await db
     .select({
       id: exercisesSchema.id,
       type: exercisesSchema.type,
@@ -1039,9 +1087,118 @@ export async function listRecentExercises(userId: string, limit = 50) {
       createdAt: exercisesSchema.createdAt,
     })
     .from(exercisesSchema)
-    .where(eq(exercisesSchema.userId, userId))
-    .orderBy(desc(exercisesSchema.createdAt))
+    .where(and(
+      eq(exercisesSchema.userId, input.userId),
+      inArray(exercisesSchema.id, input.exerciseIds),
+    ));
+
+  const exerciseMap = new Map(exerciseRows.map(exercise => [exercise.id, exercise]));
+
+  return input.exerciseIds.flatMap((exerciseId) => {
+    const exercise = exerciseMap.get(exerciseId);
+    return exercise ? [exercise] : [];
+  });
+}
+
+async function listSourceDocumentsByIds(input: {
+  userId: string;
+  documentIds: string[];
+}) {
+  if (input.documentIds.length === 0) {
+    return [] as GenerationSetSourceDocument[];
+  }
+
+  const documents = await db
+    .select({
+      id: documentsSchema.id,
+      title: documentsSchema.title,
+    })
+    .from(documentsSchema)
+    .where(and(
+      eq(documentsSchema.userId, input.userId),
+      inArray(documentsSchema.id, input.documentIds),
+    ));
+
+  const documentMap = new Map(documents.map(document => [document.id, document]));
+
+  return input.documentIds.flatMap((documentId) => {
+    const document = documentMap.get(documentId);
+    return document ? [document] : [];
+  });
+}
+
+/**
+ * Lists recent generation jobs that already have at least one generated exercise.
+ * @param userId - Authenticated user ID.
+ * @param limit - Max number of sets to return.
+ * @returns Generation job sets ordered by newest first.
+ */
+export async function listRecentGenerationSets(userId: string, limit = 10): Promise<GenerationSetRecord[]> {
+  await recoverStaleGenerationJobs(userId);
+
+  const jobs = await db
+    .select({
+      id: generationJobsSchema.id,
+      status: generationJobsSchema.status,
+      requestedCount: generationJobsSchema.requestedCount,
+      generatedCount: generationJobsSchema.generatedCount,
+      failedCount: generationJobsSchema.failedCount,
+      errorMessage: generationJobsSchema.errorMessage,
+      exerciseType: generationJobsSchema.exerciseType,
+      documentIds: generationJobsSchema.documentIds,
+      difficulty: generationJobsSchema.difficulty,
+      topicFocus: generationJobsSchema.topicFocus,
+      exerciseIds: generationJobsSchema.exerciseIds,
+      createdAt: generationJobsSchema.createdAt,
+      startedAt: generationJobsSchema.startedAt,
+      completedAt: generationJobsSchema.completedAt,
+    })
+    .from(generationJobsSchema)
+    .where(and(
+      eq(generationJobsSchema.userId, userId),
+      sql`cardinality(${generationJobsSchema.exerciseIds}) > 0`,
+    ))
+    .orderBy(desc(generationJobsSchema.createdAt))
     .limit(limit);
+
+  if (jobs.length === 0) {
+    return [];
+  }
+
+  const exerciseIds = [...new Set(jobs.flatMap(job => job.exerciseIds))];
+  const documentIds = [...new Set(jobs.flatMap(job => job.documentIds))];
+
+  const [exerciseRows, latestResponsesByExerciseId, sourceDocuments] = await Promise.all([
+    listStoredExercisesByIds({
+      userId,
+      exerciseIds,
+    }),
+    listLatestResponsesForExercises(userId, exerciseIds),
+    listSourceDocumentsByIds({
+      userId,
+      documentIds,
+    }),
+  ]);
+
+  const exerciseMap = new Map(exerciseRows.map(exercise => [exercise.id, exercise]));
+  const documentMap = new Map(sourceDocuments.map(document => [document.id, document]));
+
+  return jobs.map((job) => {
+    const exercises = job.exerciseIds.flatMap((exerciseId) => {
+      const exercise = exerciseMap.get(exerciseId);
+      return exercise ? [exercise] : [];
+    });
+
+    return {
+      job,
+      exercises,
+      latestResponsesByExerciseId,
+      sourceDocuments: job.documentIds.flatMap((documentId) => {
+        const document = documentMap.get(documentId);
+        return document ? [document] : [];
+      }),
+    };
+  });
 }
 
 /**
@@ -1052,7 +1209,7 @@ export async function listRecentExercises(userId: string, limit = 50) {
  */
 export async function listLatestResponsesForExercises(userId: string, exerciseIds: string[]) {
   if (exerciseIds.length === 0) {
-    return new Map<string, never>();
+    return new Map<string, LatestResponseRow>();
   }
 
   const rows = await db
@@ -1078,7 +1235,7 @@ export async function listLatestResponsesForExercises(userId: string, exerciseId
       desc(responsesSchema.id),
     );
 
-  return new Map(rows.map(row => [row.exerciseId, row]));
+  return new Map<string, LatestResponseRow>(rows.map(row => [row.exerciseId, row]));
 }
 
 /**
@@ -1097,6 +1254,9 @@ export async function listActiveGenerationJobs(userId: string) {
       generatedCount: generationJobsSchema.generatedCount,
       failedCount: generationJobsSchema.failedCount,
       errorMessage: generationJobsSchema.errorMessage,
+      exerciseType: generationJobsSchema.exerciseType,
+      difficulty: generationJobsSchema.difficulty,
+      topicFocus: generationJobsSchema.topicFocus,
       createdAt: generationJobsSchema.createdAt,
       startedAt: generationJobsSchema.startedAt,
       completedAt: generationJobsSchema.completedAt,
@@ -1111,4 +1271,71 @@ export async function listActiveGenerationJobs(userId: string) {
     ))
     .orderBy(desc(generationJobsSchema.createdAt))
     .limit(10);
+}
+
+type DeleteGenerationSetResult = {
+  success: true;
+} | {
+  success: false;
+  errorCode: 'JOB_NOT_FOUND' | 'JOB_NOT_DELETABLE';
+  error: string;
+};
+
+/**
+ * Deletes a completed or failed generation set and its associated exercises.
+ * Active jobs remain undeletable because the worker still coordinates on the
+ * generation_jobs row while producing additional exercises.
+ * @param input - User-scoped deletion request.
+ * @param input.jobId - Generation job identifier.
+ * @param input.userId - Authenticated user identifier.
+ * @returns Success or a scoped deletion failure.
+ */
+export async function deleteGenerationSet(input: {
+  jobId: string;
+  userId: string;
+}): Promise<DeleteGenerationSetResult> {
+  const job = await db.query.generationJobsSchema.findFirst({
+    where: and(
+      eq(generationJobsSchema.id, input.jobId),
+      eq(generationJobsSchema.userId, input.userId),
+    ),
+  });
+
+  if (!job) {
+    return {
+      success: false,
+      errorCode: 'JOB_NOT_FOUND',
+      error: 'Generation set not found',
+    };
+  }
+
+  if (job.status === 'pending' || job.status === 'processing') {
+    return {
+      success: false,
+      errorCode: 'JOB_NOT_DELETABLE',
+      error: 'Active generation sets cannot be deleted',
+    };
+  }
+
+  await db.transaction(async (tx) => {
+    if (job.exerciseIds.length > 0) {
+      await tx
+        .delete(exercisesSchema)
+        .where(and(
+          eq(exercisesSchema.userId, input.userId),
+          inArray(exercisesSchema.id, job.exerciseIds),
+        ));
+    }
+
+    await tx
+      .delete(generationJobsSchema)
+      .where(and(
+        eq(generationJobsSchema.id, input.jobId),
+        eq(generationJobsSchema.userId, input.userId),
+      ));
+  });
+
+  return {
+    success: true,
+  };
 }

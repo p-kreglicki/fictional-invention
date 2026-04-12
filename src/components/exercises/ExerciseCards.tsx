@@ -5,7 +5,7 @@ import type {
   ExerciseLatestResponse,
   SubmitResponseSuccess,
 } from '@/validations/ResponseValidation';
-import { CheckCircle } from '@untitledui/icons';
+import { CheckCircle, XCircle } from '@untitledui/icons';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/base/badges/badges';
@@ -18,6 +18,8 @@ import { SubmissionDraftsSchema, SubmitResponseSuccessSchema } from '@/validatio
 type ExerciseCardsProps = {
   exercises: ExerciseCardItem[];
   apiBasePath: string;
+  heading?: string | null;
+  showEmptyState?: boolean;
   onExerciseUpdated: (_input: {
     exerciseId: string;
     latestResponse: ExerciseLatestResponse;
@@ -39,6 +41,7 @@ type SubmissionDraft = {
 
 const submissionDraftsStorageKey = 'exercise-submission-drafts';
 const integerAnswerPattern = /^\d+$/;
+const completeQuestionPrefixPattern = /^Completa:\s*/u;
 
 function buildAnswerKey(answer: string | number) {
   return `${typeof answer}:${String(answer)}`;
@@ -164,6 +167,14 @@ function getAnswerPayload(input: {
 
 function hasCorrectLatestResponse(exercise: ExerciseCardItem) {
   return exercise.latestResponse?.score === 100;
+}
+
+function hasIncorrectLatestResponse(exercise: ExerciseCardItem) {
+  return exercise.latestResponse !== null && exercise.latestResponse.score < 100;
+}
+
+function formatExerciseQuestion(question: string) {
+  return question.replace(completeQuestionPrefixPattern, '');
 }
 
 export { type ExerciseCardItem };
@@ -332,9 +343,13 @@ export function ExerciseCards(props: ExerciseCardsProps) {
   }
 
   if (props.exercises.length === 0) {
+    if (props.showEmptyState === false) {
+      return null;
+    }
+
     return (
       <section className={panelStyles()}>
-        <h2 className="text-base font-semibold text-ink-900">{t('results_title')}</h2>
+        <h2 className="text-base font-semibold text-ink-900">{props.heading ?? t('results_title')}</h2>
         <p className="mt-2 text-sm text-ink-600">{t('results_empty')}</p>
       </section>
     );
@@ -342,12 +357,15 @@ export function ExerciseCards(props: ExerciseCardsProps) {
 
   return (
     <section className="space-y-4">
-      <h2 className="text-base font-semibold text-ink-900">{t('results_title')}</h2>
+      {props.heading !== null && (
+        <h2 className="text-base font-semibold text-ink-900">{props.heading ?? t('results_title')}</h2>
+      )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {props.exercises.map((exercise) => {
           const submissionState = submissionStateByExerciseId[exercise.id];
           const isSolved = hasCorrectLatestResponse(exercise);
+          const isIncorrect = hasIncorrectLatestResponse(exercise);
           const exerciseTypeLabel = exercise.type === 'multiple_choice'
             ? null
             : getExerciseTypeLabel({ exercise, t });
@@ -360,7 +378,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
           );
 
           return (
-            <article key={exercise.id} className="rounded-[1.75rem] border border-white/85 bg-white p-5 shadow-sm">
+            <article key={exercise.id} className="rounded-[1.75rem] border border-ink-200 bg-white p-5">
               {metadataLabels.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-ink-500 uppercase">
                   {metadataLabels.map((label, index) => (
@@ -373,12 +391,20 @@ export function ExerciseCards(props: ExerciseCardsProps) {
               )}
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <h3 className="text-base font-semibold text-ink-900">{exercise.question}</h3>
+                <h3 className="text-base font-semibold text-ink-900">{formatExerciseQuestion(exercise.question)}</h3>
                 {isSolved && (
                   <Badge color="success" size="md" type="pill-color">
                     <span className="flex items-center gap-1.5">
                       <CheckCircle className="size-3.5" />
                       <span>{t('correct_answer_badge')}</span>
+                    </span>
+                  </Badge>
+                )}
+                {isIncorrect && (
+                  <Badge color="error" size="md" type="pill-color">
+                    <span className="flex items-center gap-1.5">
+                      <XCircle className="size-3.5" />
+                      <span>{t('incorrect_answer_badge')}</span>
                     </span>
                   </Badge>
                 )}
@@ -394,11 +420,11 @@ export function ExerciseCards(props: ExerciseCardsProps) {
               )}
 
               {exercise.type === 'multiple_choice' && (
-                <fieldset className="mt-3 space-y-3">
-                  <legend className="text-sm text-ink-700">{t('choose_correct_answer_label')}</legend>
+                <fieldset className="mt-3">
+
                   <RadioGroup
                     aria-label={t('choose_correct_answer_label')}
-                    className="mt-3 space-y-3"
+                    className="mt-3"
                     onChange={(value) => {
                       clearSubmissionDraft(exercise.id);
                       setAnswersByExerciseId(current => ({
@@ -417,7 +443,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
                       return (
                         <RadioButton
                           key={`${exercise.id}-${option}-${duplicateCount}`}
-                          className="rounded-lg border border-ink-100 bg-ink-50/75 px-4 py-3"
+                          className="px-4 py-3"
                           isDisabled={submissionState?.isSubmitting}
                           label={option}
                           value={String(index)}

@@ -1,19 +1,27 @@
 'use client';
 
-import type { ExerciseCardItem } from './ExerciseCards';
 import type { ExerciseGenerationJobStatus } from './GenerationJobStatus';
 import type { DocumentListItem } from '@/validations/DocumentValidation';
-import type { ExerciseLatestResponse } from '@/validations/ResponseValidation';
+import type {
+  ExerciseLatestResponse,
+  ExercisesDashboardResponse,
+  ExerciseSet,
+} from '@/validations/ResponseValidation';
 import { ArrowRight } from '@untitledui/icons';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
+import { DeleteExerciseSetDialog } from '@/components/exercises/DeleteExerciseSetDialog';
+import { ExerciseSetAccordion } from '@/components/exercises/ExerciseSetAccordion';
 import { createPollingGate } from '@/components/exercises/PollingGate';
 import { buttonStyles, panelStyles } from '@/components/ui/styles';
 import { Link } from '@/libs/I18nNavigation';
 import { DocumentListItemSchema } from '@/validations/DocumentValidation';
-import { ExerciseCardSchema, SubmitResponseSuccessSchema } from '@/validations/ResponseValidation';
-import { ExerciseCards } from './ExerciseCards';
+import {
+  ExercisesDashboardResponseSchema,
+  ExerciseSetSchema,
+  SubmitResponseSuccessSchema,
+} from '@/validations/ResponseValidation';
 import { ExerciseGeneratorForm } from './ExerciseGeneratorForm';
 import { GenerationJobStatus } from './GenerationJobStatus';
 
@@ -28,26 +36,6 @@ type GenerateRequest = {
 const DocumentsResponseSchema = z.object({
   documents: z.array(DocumentListItemSchema),
 });
-
-const ExercisesSyncResponseSchema = z.object({
-  exercises: z.array(ExerciseCardSchema),
-});
-
-function mergeExercises(current: ExerciseCardItem[], incoming: ExerciseCardItem[]) {
-  const map = new Map<string, ExerciseCardItem>();
-
-  for (const exercise of current) {
-    map.set(exercise.id, exercise);
-  }
-
-  for (const exercise of incoming) {
-    map.set(exercise.id, exercise);
-  }
-
-  return [...map.values()].sort((a, b) => {
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
-}
 
 function mergeJobs(current: ExerciseGenerationJobStatus[], incoming: ExerciseGenerationJobStatus[]) {
   const map = new Map<string, ExerciseGenerationJobStatus>();
@@ -65,6 +53,66 @@ function mergeJobs(current: ExerciseGenerationJobStatus[], incoming: ExerciseGen
   });
 }
 
+function mergeSets(current: ExerciseSet[], incoming: ExerciseSet[]) {
+  const map = new Map<string, ExerciseSet>();
+
+  for (const set of current) {
+    map.set(set.id, set);
+  }
+
+  for (const set of incoming) {
+    map.set(set.id, set);
+  }
+
+  return [...map.values()].sort((a, b) => {
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+}
+
+function toJobSummary(set: ExerciseSet): ExerciseGenerationJobStatus {
+  return {
+    id: set.id,
+    status: set.status,
+    requestedCount: set.requestedCount,
+    generatedCount: set.generatedCount,
+    failedCount: set.failedCount,
+    errorMessage: set.errorMessage,
+    exerciseType: set.exerciseType,
+    difficulty: set.difficulty,
+    topicFocus: set.topicFocus,
+    createdAt: set.createdAt,
+    startedAt: set.startedAt,
+    completedAt: set.completedAt,
+  };
+}
+
+function findExerciseInDashboardPayload(input: {
+  exerciseId: string;
+  payload: ExercisesDashboardResponse;
+}) {
+  for (const set of input.payload.sets) {
+    const exercise = set.exercises.find(candidate => candidate.id === input.exerciseId);
+    if (exercise) {
+      return exercise;
+    }
+  }
+
+  return null;
+}
+
+async function parseOptionalJsonResponse<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    return null;
+  }
+
+  try {
+    return await response.json() as T;
+  } catch {
+    return null;
+  }
+}
+
 export function ExercisesDashboard() {
   const locale = useLocale();
   const t = useTranslations('DashboardExercisesPage');
@@ -72,10 +120,13 @@ export function ExercisesDashboard() {
   const pollingGateRef = useRef(createPollingGate());
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeletingSet, setIsDeletingSet] = useState(false);
   const [documents, setDocuments] = useState<DocumentListItem[]>([]);
   const [jobs, setJobs] = useState<ExerciseGenerationJobStatus[]>([]);
-  const [exercises, setExercises] = useState<ExerciseCardItem[]>([]);
+  const [sets, setSets] = useState<ExerciseSet[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deleteSetErrorMessage, setDeleteSetErrorMessage] = useState<string | null>(null);
+  const [setToDelete, setSetToDelete] = useState<ExerciseSet | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -92,12 +143,9 @@ export function ExercisesDashboard() {
         }
 
         const documentsPayload = DocumentsResponseSchema.safeParse(await documentsResponse.json() as unknown);
-        const exercisesPayload = await exercisesResponse.json() as {
-          exercises: ExerciseCardItem[];
-          activeJobs: ExerciseGenerationJobStatus[];
-        };
+        const exercisesPayload = ExercisesDashboardResponseSchema.safeParse(await exercisesResponse.json() as unknown);
 
-        if (!documentsPayload.success) {
+        if (!documentsPayload.success || !exercisesPayload.success) {
           throw new Error('documents_invalid');
         }
 
@@ -106,8 +154,8 @@ export function ExercisesDashboard() {
         }
 
         setDocuments(documentsPayload.data.documents);
-        setExercises(exercisesPayload.exercises);
-        setJobs(exercisesPayload.activeJobs);
+        setSets(exercisesPayload.data.sets);
+        setJobs(exercisesPayload.data.activeJobs);
       } catch {
         if (!active) {
           return;
@@ -162,37 +210,29 @@ export function ExercisesDashboard() {
             return null;
           }
 
-          return response.json() as Promise<ExerciseGenerationJobStatus & {
-            exercises: ExerciseCardItem[];
-          }>;
+          const payload = ExerciseSetSchema.safeParse(await response.json() as unknown);
+          return payload.success ? payload.data : null;
         }));
 
         if (!active) {
           return;
         }
 
-        const filtered = results.filter((result): result is ExerciseGenerationJobStatus & { exercises: ExerciseCardItem[] } => {
+        const nextSets = results.filter((result): result is ExerciseSet => {
           return Boolean(result);
         });
+        const visibleSets = nextSets.filter(set => set.exercises.length > 0);
 
         setJobs((current) => {
-          return mergeJobs(current, filtered.map(job => ({
-            id: job.id,
-            status: job.status,
-            requestedCount: job.requestedCount,
-            generatedCount: job.generatedCount,
-            failedCount: job.failedCount,
-            errorMessage: job.errorMessage,
-            createdAt: job.createdAt,
-            startedAt: job.startedAt,
-            completedAt: job.completedAt,
-          })));
+          const merged = mergeJobs(current, nextSets.map(toJobSummary));
+          const visibleSetIds = new Set(visibleSets.map(set => set.id));
+
+          return merged.filter(job => !visibleSetIds.has(job.id));
         });
 
-        const exerciseResults = filtered.flatMap(job => job.exercises);
-        if (exerciseResults.length > 0) {
-          setExercises((current) => {
-            return mergeExercises(current, exerciseResults);
+        if (visibleSets.length > 0) {
+          setSets((current) => {
+            return mergeSets(current, visibleSets);
           });
         }
       } catch {
@@ -248,6 +288,9 @@ export function ExercisesDashboard() {
           generatedCount: 0,
           failedCount: 0,
           errorMessage: null,
+          exerciseType: request.exerciseType,
+          difficulty: request.difficulty ?? null,
+          topicFocus: request.topicFocus ?? null,
           createdAt: now,
           startedAt: null,
           completedAt: null,
@@ -267,18 +310,31 @@ export function ExercisesDashboard() {
     timesAttempted: number;
     averageScore: number | null;
   }) {
-    setExercises(current => current.map((exercise) => {
-      if (exercise.id !== input.exerciseId) {
-        return exercise;
-      }
+    setSets((current) => {
+      return current.map((set) => {
+        let didUpdate = false;
+        const exercises = set.exercises.map((exercise) => {
+          if (exercise.id !== input.exerciseId) {
+            return exercise;
+          }
 
-      return {
-        ...exercise,
-        latestResponse: input.latestResponse,
-        timesAttempted: input.timesAttempted,
-        averageScore: input.averageScore,
-      };
-    }));
+          didUpdate = true;
+          return {
+            ...exercise,
+            latestResponse: input.latestResponse,
+            timesAttempted: input.timesAttempted,
+            averageScore: input.averageScore,
+          };
+        });
+
+        return didUpdate
+          ? {
+              ...set,
+              exercises,
+            }
+          : set;
+      });
+    });
   }
 
   async function handleExerciseSyncRequested(exerciseId: string) {
@@ -288,17 +344,21 @@ export function ExercisesDashboard() {
         return null;
       }
 
-      const parsedPayload = ExercisesSyncResponseSchema.safeParse(await response.json() as unknown);
+      const parsedPayload = ExercisesDashboardResponseSchema.safeParse(await response.json() as unknown);
       if (!parsedPayload.success) {
         return null;
       }
 
-      const matchedExercise = parsedPayload.data.exercises.find(exercise => exercise.id === exerciseId);
+      const matchedExercise = findExerciseInDashboardPayload({
+        exerciseId,
+        payload: parsedPayload.data,
+      });
       if (!matchedExercise?.latestResponse) {
         return null;
       }
 
-      setExercises(current => mergeExercises(current, [matchedExercise]));
+      setSets(current => mergeSets(current, parsedPayload.data.sets));
+      setJobs(parsedPayload.data.activeJobs);
 
       return SubmitResponseSuccessSchema.parse({
         response: matchedExercise.latestResponse,
@@ -309,6 +369,34 @@ export function ExercisesDashboard() {
       });
     } catch {
       return null;
+    }
+  }
+
+  async function handleDeleteSetConfirm() {
+    if (!setToDelete) {
+      return;
+    }
+
+    setIsDeletingSet(true);
+    setDeleteSetErrorMessage(null);
+
+    try {
+      const response = await fetch(`${apiBasePath}/exercises/jobs/${setToDelete.id}`, {
+        method: 'DELETE',
+      });
+      const payload = await parseOptionalJsonResponse<{ error?: string; message?: string }>(response);
+
+      if (!response.ok) {
+        throw new Error(payload?.message ?? payload?.error ?? t('delete_set_error'));
+      }
+
+      setSets(current => current.filter(set => set.id !== setToDelete.id));
+      setJobs(current => current.filter(job => job.id !== setToDelete.id));
+      setSetToDelete(null);
+    } catch (error) {
+      setDeleteSetErrorMessage(error instanceof Error ? error.message : t('delete_set_error'));
+    } finally {
+      setIsDeletingSet(false);
     }
   }
 
@@ -357,9 +445,7 @@ export function ExercisesDashboard() {
 
       {readyDocuments.length > 0 && processingDocumentsCount > 0 && (
         <section className={panelStyles({ tone: 'muted', className: 'text-sm text-ink-600' })}>
-          {processingDocumentsCount > 0 && (
-            <p>{t('state_partial_processing', { count: processingDocumentsCount })}</p>
-          )}
+          <p>{t('state_partial_processing', { count: processingDocumentsCount })}</p>
         </section>
       )}
 
@@ -371,11 +457,31 @@ export function ExercisesDashboard() {
       />
 
       <GenerationJobStatus jobs={jobs} />
-      <ExerciseCards
-        exercises={exercises}
+
+      <ExerciseSetAccordion
         apiBasePath={apiBasePath}
-        onExerciseUpdated={handleExerciseUpdated}
+        onDeleteRequest={(set) => {
+          setDeleteSetErrorMessage(null);
+          setSetToDelete(set);
+        }}
         onExerciseSyncRequested={handleExerciseSyncRequested}
+        onExerciseUpdated={handleExerciseUpdated}
+        sets={sets}
+      />
+
+      <DeleteExerciseSetDialog
+        errorMessage={deleteSetErrorMessage}
+        isDeleting={isDeletingSet}
+        onCancel={() => {
+          if (isDeletingSet) {
+            return;
+          }
+
+          setSetToDelete(null);
+          setDeleteSetErrorMessage(null);
+        }}
+        onConfirm={handleDeleteSetConfirm}
+        setToDelete={setToDelete}
       />
     </div>
   );

@@ -8,7 +8,7 @@
     "preinstall": "node scripts/check-forbidden-deps.mjs",
     "dev:spotlight": "npx @spotlightjs/spotlight",
     "dev:next": "next dev",
-    "dev": "run-p db-server:file dev:*",
+    "dev": "node scripts/dev.mjs",
     "build:next": "next build --webpack",
     "build-local": "run-p db-server:memory build:next --race",
     "build": "run-s db:migrate build:next",

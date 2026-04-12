@@ -121,7 +121,7 @@ type RadioGroupProps = {
 export const RadioGroup = ({ children, className, size = 'sm', ...props }: RadioGroupProps) => {
   return (
     <RadioGroupContext value={{ size }}>
-      <AriaRadioGroup {...props} className={cx('flex flex-col gap-4', className)}>
+      <AriaRadioGroup {...props} className={cx('flex flex-col', className)}>
         {children}
       </AriaRadioGroup>
     </RadioGroupContext>

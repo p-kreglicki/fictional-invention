@@ -32,33 +32,14 @@ const state = {
   insertOrder: [] as string[],
 };
 
-const exerciseLocks = new Map<string, Promise<void>>();
+let transactionLock = Promise.resolve();
 
 function resetState() {
   state.exercises = new Map();
   state.responses = [];
   state.lockOrder = [];
   state.insertOrder = [];
-  exerciseLocks.clear();
-}
-
-function createLock(exerciseId: string) {
-  let release: (() => void) | undefined;
-  const waitForTurn = exerciseLocks.get(exerciseId) ?? Promise.resolve();
-  const nextTurn = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  exerciseLocks.set(exerciseId, nextTurn);
-
-  return {
-    waitForTurn,
-    release: () => {
-      release?.();
-      if (exerciseLocks.get(exerciseId) === nextTurn) {
-        exerciseLocks.delete(exerciseId);
-      }
-    },
-  };
+  transactionLock = Promise.resolve();
 }
 
 function roundAverage(scores: number[]) {
@@ -84,9 +65,6 @@ function createMockTransactionClient() {
         return { rows: [] };
       }
 
-      const lock = createLock(exercise.id);
-      await lock.waitForTurn;
-      releaseExerciseLock = lock.release;
       lockedExerciseId = exercise.id;
       state.lockOrder.push(exercise.id);
 
@@ -181,13 +159,21 @@ function createMockTransactionClient() {
 }
 
 const mockDb = {
-  transaction: vi.fn(async (callback: (tx: ReturnType<typeof createMockTransactionClient>) => Promise<unknown>) => {
+  transaction: vi.fn(async (callback: (_tx: ReturnType<typeof createMockTransactionClient>) => Promise<unknown>) => {
+    let release: (() => void) | undefined;
+    const waitForTurn = transactionLock;
+    transactionLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await waitForTurn;
+
     const tx = createMockTransactionClient();
 
     try {
       return await callback(tx);
     } finally {
       tx.__release();
+      release?.();
     }
   }),
 };

@@ -7,6 +7,7 @@ const evaluationMethodValues = ['deterministic', 'llm'] as const;
 
 const DifficultySchema = z.enum(difficultyValues);
 const EvaluationMethodSchema = z.enum(evaluationMethodValues);
+const ExerciseSetStatusSchema = z.enum(['pending', 'processing', 'completed', 'failed']);
 
 const TextAnswerSchema = z.string().trim().min(1).max(2000);
 const MultipleChoiceAnswerSchema = z.number().int().min(0).max(3);
@@ -89,6 +90,36 @@ export const ExerciseCardSchema = z.discriminatedUnion('type', [
   SingleAnswerExerciseCardSchema,
 ]);
 
+export const ExerciseSetSchema = z.object({
+  id: z.uuid(),
+  status: ExerciseSetStatusSchema,
+  requestedCount: z.number().int().nonnegative(),
+  generatedCount: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
+  errorMessage: z.string().trim().min(1).nullable(),
+  exerciseType: z.enum(['multiple_choice', 'fill_gap', 'single_answer']),
+  difficulty: DifficultySchema.nullable(),
+  topicFocus: z.string().trim().min(1).max(120).nullable(),
+  createdAt: z.iso.datetime(),
+  startedAt: z.iso.datetime().nullable(),
+  completedAt: z.iso.datetime().nullable(),
+  sourceDocuments: z.array(z.object({
+    id: z.uuid(),
+    title: z.string().trim().min(1).max(200),
+  })).max(10),
+  exercises: z.array(ExerciseCardSchema).max(50),
+});
+
+export const ExerciseSetSummarySchema = ExerciseSetSchema.omit({
+  sourceDocuments: true,
+  exercises: true,
+});
+
+export const ExercisesDashboardResponseSchema = z.object({
+  sets: z.array(ExerciseSetSchema).max(20),
+  activeJobs: z.array(ExerciseSetSummarySchema).max(20),
+});
+
 export const SubmitResponseSuccessSchema = z.object({
   response: ExerciseLatestResponseSchema,
   exerciseStats: z.object({
@@ -138,6 +169,9 @@ export const ResponsesHistoryResponseSchema = z.object({
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
 export type ExerciseLatestResponse = z.infer<typeof ExerciseLatestResponseSchema>;
 export type ExerciseCard = z.infer<typeof ExerciseCardSchema>;
+export type ExerciseSet = z.infer<typeof ExerciseSetSchema>;
+export type ExerciseSetSummary = z.infer<typeof ExerciseSetSummarySchema>;
+export type ExercisesDashboardResponse = z.infer<typeof ExercisesDashboardResponseSchema>;
 export type SubmitResponseSuccess = z.infer<typeof SubmitResponseSuccessSchema>;
 export type ProgressSourceDocument = z.infer<typeof ProgressSourceDocumentSchema>;
 export type ProgressHistoryItem = z.infer<typeof ProgressHistoryItemSchema>;
