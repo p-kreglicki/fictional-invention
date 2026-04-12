@@ -31,7 +31,7 @@ if (changedFiles.length === 0) {
 
 console.log(`Linting ${changedFiles.length} changed file(s) between ${base} and ${head}.`);
 
-const result = spawnSync('npx', ['eslint', ...changedFiles], {
+const result = spawnSync('npx', ['eslint', '--no-warn-ignored', ...changedFiles], {
   stdio: 'inherit',
 });
 

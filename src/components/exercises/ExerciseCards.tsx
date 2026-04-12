@@ -378,7 +378,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
           );
 
           return (
-            <article key={exercise.id} className="no-shadow rounded-[1.75rem] border border-ink-200 bg-white p-5">
+            <article key={exercise.id} className="rounded-[1.75rem] border border-ink-200 bg-white p-5">
               {metadataLabels.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-ink-500 uppercase">
                   {metadataLabels.map((label, index) => (

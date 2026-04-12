@@ -12,7 +12,7 @@ import { ExerciseCards } from './ExerciseCards';
 
 type ExerciseSetAccordionProps = {
   apiBasePath: string;
-  onDeleteRequest: (set: ExerciseSet) => void;
+  onDeleteRequest: (_set: ExerciseSet) => void;
   onExerciseSyncRequested?: (_exerciseId: string) => Promise<SubmitResponseSuccess | null>;
   onExerciseUpdated: (_input: {
     exerciseId: string;
@@ -105,7 +105,7 @@ export function ExerciseSetAccordion(props: ExerciseSetAccordionProps) {
                   >
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 flex-wrap items-center gap-2">
-                        <span className="text-1xl truncate leading-8 font-semibold tracking-[-0.02em] text-ink-950">
+                        <span className="truncate text-xl leading-8 font-semibold tracking-[-0.02em] text-ink-950">
                           {headerTitle}
                         </span>
                         <Badge color="brand" size="md" type="pill-color">

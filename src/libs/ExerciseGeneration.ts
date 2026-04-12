@@ -28,6 +28,7 @@ const PENDING_STALE_JOB_THRESHOLD_MS = Env.GENERATION_PENDING_STALE_MS ?? 10 * 6
 const PROCESSING_STALE_JOB_THRESHOLD_MS = Env.GENERATION_PROCESSING_STALE_MS ?? 20 * 60 * 1000;
 const CHAT_REQUEST_DELAY_MS = Env.MISTRAL_CHAT_REQUEST_DELAY_MS ?? 0;
 const LOG_PAYLOAD_EXCERPT_LENGTH = 400;
+const MULTIPLE_WHITESPACE_REGEX = /\s+/g;
 
 type GenerationCandidate = {
   documentId: string;
@@ -204,7 +205,7 @@ function buildCandidateSubsetKey(candidates: GenerationCandidate[]) {
 function normalizeGeneratedQuestion(question: string) {
   return question
     .normalize('NFC')
-    .replace(/\s+/g, ' ')
+    .replace(MULTIPLE_WHITESPACE_REGEX, ' ')
     .trim()
     .toLocaleLowerCase('it-IT');
 }
