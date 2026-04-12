@@ -77,7 +77,15 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
-      - name: Linter
+      - if: github.event_name == 'pull_request'
+        name: Linter (changed files)
+        run: npm run lint:changed -- --base "$BASE_SHA" --head "$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - if: github.event_name != 'pull_request'
+        name: Linter (full repository)
         run: npm run lint
 
       - name: Type checking
