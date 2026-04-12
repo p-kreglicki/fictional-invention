@@ -18,6 +18,8 @@ import { SubmissionDraftsSchema, SubmitResponseSuccessSchema } from '@/validatio
 type ExerciseCardsProps = {
   exercises: ExerciseCardItem[];
   apiBasePath: string;
+  heading?: string | null;
+  showEmptyState?: boolean;
   onExerciseUpdated: (_input: {
     exerciseId: string;
     latestResponse: ExerciseLatestResponse;
@@ -341,9 +343,13 @@ export function ExerciseCards(props: ExerciseCardsProps) {
   }
 
   if (props.exercises.length === 0) {
+    if (props.showEmptyState === false) {
+      return null;
+    }
+
     return (
       <section className={panelStyles()}>
-        <h2 className="text-base font-semibold text-ink-900">{t('results_title')}</h2>
+        <h2 className="text-base font-semibold text-ink-900">{props.heading ?? t('results_title')}</h2>
         <p className="mt-2 text-sm text-ink-600">{t('results_empty')}</p>
       </section>
     );
@@ -351,7 +357,9 @@ export function ExerciseCards(props: ExerciseCardsProps) {
 
   return (
     <section className="space-y-4">
-      <h2 className="text-base font-semibold text-ink-900">{t('results_title')}</h2>
+      {props.heading !== null && (
+        <h2 className="text-base font-semibold text-ink-900">{props.heading ?? t('results_title')}</h2>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {props.exercises.map((exercise) => {
@@ -370,7 +378,7 @@ export function ExerciseCards(props: ExerciseCardsProps) {
           );
 
           return (
-            <article key={exercise.id} className="rounded-[1.75rem] border border-white/85 bg-white p-5 shadow-sm">
+            <article key={exercise.id} className="no-shadow rounded-[1.75rem] border border-ink-200 bg-white p-5">
               {metadataLabels.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 text-xs tracking-wide text-ink-500 uppercase">
                   {metadataLabels.map((label, index) => (

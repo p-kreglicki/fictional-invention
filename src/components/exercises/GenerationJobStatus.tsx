@@ -1,21 +1,11 @@
 'use client';
 
+import type { ExerciseSetSummary } from '@/validations/ResponseValidation';
 import { useTranslations } from 'next-intl';
 import { badgeStyles, panelStyles } from '@/components/ui/styles';
 
-type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
-
-export type ExerciseGenerationJobStatus = {
-  id: string;
-  status: JobStatus;
-  requestedCount: number;
-  generatedCount: number;
-  failedCount: number;
-  errorMessage: string | null;
-  createdAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-};
+type JobStatus = ExerciseSetSummary['status'];
+export type ExerciseGenerationJobStatus = ExerciseSetSummary;
 
 type GenerationJobStatusProps = {
   jobs: ExerciseGenerationJobStatus[];
