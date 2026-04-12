@@ -8,7 +8,7 @@ import { Table } from '@/components/untitled/application/table/table';
 
 type DocumentsLibraryProps = {
   documents: DocumentListItem[];
-  onDelete: (document: DocumentListItem) => void;
+  onDelete: (_document: DocumentListItem) => void;
   title?: string;
   description?: string;
   emptyMessage?: string;

@@ -59,7 +59,7 @@ function createSubmitResponsePayload(input?: {
 
 function ExerciseCardsHarness(props: {
   exercise: ExerciseCardItem;
-  onExerciseSyncRequested?: (exerciseId: string) => Promise<SubmitResponseSuccess | null>;
+  onExerciseSyncRequested?: (_exerciseId: string) => Promise<SubmitResponseSuccess | null>;
   useStrictMode?: boolean;
 }) {
   const [exercises, setExercises] = useState([props.exercise]);
@@ -142,8 +142,8 @@ describe('ExerciseCards', () => {
   it('keeps the submit button locked while a request is in flight', async () => {
     let resolveFetch: ((value: Response | PromiseLike<Response>) => void) | undefined;
     vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
-      return new Promise((resolve) => {
-        resolveFetch = resolve;
+      return new Promise((_resolve) => {
+        resolveFetch = _resolve;
       });
     });
 
