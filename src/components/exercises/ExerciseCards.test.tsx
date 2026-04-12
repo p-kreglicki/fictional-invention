@@ -96,7 +96,7 @@ describe('ExerciseCards', () => {
     window.sessionStorage.clear();
   });
 
-  it('submits a multiple-choice answer and renders inline feedback', async () => {
+  it('submits a multiple-choice answer, stores the result, and marks the exercise as solved', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(createSubmitResponsePayload()), {
       status: 200,
       headers: {
@@ -112,10 +112,10 @@ describe('ExerciseCards', () => {
     await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
-    await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
-    await expect.element(page.getByText('Score: 100/100')).toBeInTheDocument();
-    await expect.element(page.getByText(exerciseMessages.attempts_label)).not.toBeInTheDocument();
-    await expect.element(page.getByText(exerciseMessages.average_score_label)).not.toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.correct_answer_badge, { exact: true })).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.latest_response_label)).not.toBeInTheDocument();
+    await expect.element(page.getByText('Score: 100/100')).not.toBeInTheDocument();
+    await expect.element(page.getByRole('button', { name: exerciseMessages.submit_answer_button })).toBeDisabled();
   });
 
   it('renders duplicate multiple-choice labels without emitting a key warning', async () => {
@@ -167,7 +167,8 @@ describe('ExerciseCards', () => {
       },
     }));
 
-    await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
+    await expect.element(page.getByRole('button', { name: exerciseMessages.submit_answer_button })).toBeEnabled();
+    await expect.element(page.getByText(exerciseMessages.correct_answer_badge, { exact: true })).not.toBeInTheDocument();
   });
 
   it('reuses the submission id when retrying the same answer', async () => {
@@ -189,7 +190,7 @@ describe('ExerciseCards', () => {
 
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
-    await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.correct_answer_badge, { exact: true })).toBeInTheDocument();
 
     const firstRequest = fetchSpy.mock.calls[0]?.[1];
     const secondRequest = fetchSpy.mock.calls[1]?.[1];
@@ -256,8 +257,8 @@ describe('ExerciseCards', () => {
     await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
-    await expect.element(page.getByText(exerciseMessages.latest_response_label)).toBeInTheDocument();
-    await expect.element(page.getByRole('button', { name: exerciseMessages.submit_answer_button })).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.correct_answer_badge, { exact: true })).toBeInTheDocument();
+    await expect.element(page.getByRole('button', { name: exerciseMessages.submit_answer_button })).toBeDisabled();
   });
 
   it('refreshes one exercise when a 200 payload is malformed', async () => {
@@ -285,8 +286,9 @@ describe('ExerciseCards', () => {
     await page.getByText('Io ho visto', { exact: true }).click();
     await page.getByRole('button', { name: exerciseMessages.submit_answer_button }).click();
 
-    await expect.element(page.getByText('Recovered from refresh.')).toBeInTheDocument();
-    await expect.element(page.getByRole('button', { name: exerciseMessages.submit_answer_button })).toBeInTheDocument();
+    await expect.element(page.getByText(exerciseMessages.correct_answer_badge, { exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByText('Recovered from refresh.')).not.toBeInTheDocument();
+    await expect.element(page.getByRole('button', { name: exerciseMessages.submit_answer_button })).toBeEnabled();
     expect(onExerciseSyncRequested).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440010');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
