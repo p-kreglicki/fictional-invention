@@ -159,7 +159,7 @@ function createMockTransactionClient() {
 }
 
 const mockDb = {
-  transaction: vi.fn(async (callback: (tx: ReturnType<typeof createMockTransactionClient>) => Promise<unknown>) => {
+  transaction: vi.fn(async (callback: (_tx: ReturnType<typeof createMockTransactionClient>) => Promise<unknown>) => {
     let release: (() => void) | undefined;
     const waitForTurn = transactionLock;
     transactionLock = new Promise<void>((resolve) => {
