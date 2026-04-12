@@ -101,6 +101,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build]
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     steps:
       - uses: actions/checkout@v6
@@ -116,10 +118,10 @@ jobs:
           args: npm run test -- --coverage
 
       - name: Upload coverage reports to Codecov
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v6
         env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          CODECOV_TOKEN: ${{ env.CODECOV_TOKEN }}
 
   storybook:
     strategy:
@@ -153,9 +155,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build]
-    if: ${{ secrets.CLERK_SECRET_KEY != '' && (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '') }}
     env:
       CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      HAS_E2E_CREDENTIALS: ${{ secrets.CLERK_SECRET_KEY != '' && (secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '') }}
 
     steps:
       - uses: actions/checkout@v6
@@ -163,25 +167,28 @@ jobs:
           fetch-depth: 0 # For chromatic
 
       - name: Set up Node.js environment
+        if: ${{ env.HAS_E2E_CREDENTIALS == 'true' }}
         uses: ./.github/actions/setup-project
         with:
           node-version: ${{ matrix.node-version }}
           restore-nextjs-cache: true
 
       - name: Run E2E tests
+        if: ${{ env.HAS_E2E_CREDENTIALS == 'true' }}
         uses: docker://mcr.microsoft.com/playwright:v1.58.1
         with:
           args: sh -c "HOME=/root npm run test:e2e" # Set HOME to /root to avoid Playwright error with Firebox
         env:
-          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
 
       - name: Fix test results permission # Give permissions to test results needed by Chromatic
+        if: ${{ env.HAS_E2E_CREDENTIALS == 'true' }}
         run: |
           sudo chmod -R 777 test-results
 
       - name: Run visual regression tests
-        if: ${{ env.CHROMATIC_PROJECT_TOKEN != '' }}
+        if: ${{ env.HAS_E2E_CREDENTIALS == 'true' && env.CHROMATIC_PROJECT_TOKEN != '' }}
         uses: chromaui/action@v13
         with:
           playwright: true
@@ -190,8 +197,8 @@ jobs:
           projectToken: ${{ env.CHROMATIC_PROJECT_TOKEN }}
 
       - name: Upload test results
+        if: ${{ always() && env.HAS_E2E_CREDENTIALS == 'true' }}
         uses: actions/upload-artifact@v7
-        if: always()
         with:
           name: test-results
           path: test-results/
