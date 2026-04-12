@@ -129,6 +129,7 @@
     "single_answer_placeholder": "Rédigez votre réponse en italien",
     "submit_answer_button": "Envoyer la réponse",
     "submit_answer_loading": "Évaluation...",
+    "correct_answer_badge": "Correct !",
     "submission_validation_error": "Saisissez une réponse avant l'envoi.",
     "submission_failed": "Impossible d'envoyer la réponse.",
     "latest_response_label": "Dernier retour",

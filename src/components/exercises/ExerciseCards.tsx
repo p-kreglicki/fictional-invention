@@ -18,13 +18,13 @@ import { SubmissionDraftsSchema, SubmitResponseSuccessSchema } from '@/validatio
 type ExerciseCardsProps = {
   exercises: ExerciseCardItem[];
   apiBasePath: string;
-  onExerciseUpdated: (input: {
+  onExerciseUpdated: (_input: {
     exerciseId: string;
     latestResponse: ExerciseLatestResponse;
     timesAttempted: number;
     averageScore: number | null;
   }) => void;
-  onExerciseSyncRequested?: (exerciseId: string) => Promise<SubmitResponseSuccess | null>;
+  onExerciseSyncRequested?: (_exerciseId: string) => Promise<SubmitResponseSuccess | null>;
 };
 
 type SubmissionState = {
@@ -38,6 +38,7 @@ type SubmissionDraft = {
 };
 
 const submissionDraftsStorageKey = 'exercise-submission-drafts';
+const integerAnswerPattern = /^\d+$/;
 
 function buildAnswerKey(answer: string | number) {
   return `${typeof answer}:${String(answer)}`;
@@ -146,7 +147,7 @@ function getAnswerPayload(input: {
   exercise: ExerciseCardItem;
 }) {
   if (input.exercise.type === 'multiple_choice') {
-    if (!input.answerValue || !/^\d+$/.test(input.answerValue)) {
+    if (!input.answerValue || !integerAnswerPattern.test(input.answerValue)) {
       return null;
     }
 

@@ -16,6 +16,7 @@
     "build-stats": "cross-env ANALYZE=true npm run build",
     "clean": "rimraf .next out coverage",
     "lint": "eslint .",
+    "lint:changed": "node scripts/lint-changed.mjs",
     "lint:fix": "eslint . --fix",
     "check:types": "tsc --noEmit --pretty",
     "check:forbidden-deps": "node scripts/check-forbidden-deps.mjs",
