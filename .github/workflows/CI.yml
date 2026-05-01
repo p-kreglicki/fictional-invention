@@ -197,7 +197,7 @@ jobs:
 
       - name: Run visual regression tests
         if: ${{ env.HAS_E2E_CREDENTIALS == 'true' && env.CHROMATIC_PROJECT_TOKEN != '' }}
-        uses: chromaui/action@v13
+        uses: chromaui/action@v16
         with:
           playwright: true
           exitOnceUploaded: true # Speed up by skipping the build results
